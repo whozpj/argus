@@ -136,6 +136,17 @@ func (d *Detector) checkModel(model string) DriftResult {
 		state.clearCount = 0
 	}
 
+	// Persist after hysteresis so Alerted reflects the current window's outcome.
+	if err := d.db.UpsertDriftState(store.DriftState{
+		Model:         model,
+		Score:         score,
+		POutputTokens: pOut,
+		PLatencyMs:    pLat,
+		Alerted:       state.alerted,
+	}); err != nil {
+		slog.Error("drift: persist state", "model", model, "err", err)
+	}
+
 	return result
 }
 

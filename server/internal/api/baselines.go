@@ -9,8 +9,8 @@ import (
 )
 
 type baselinesResponse struct {
-	TotalEvents int              `json:"total_events"`
-	Baselines   []baselineJSON   `json:"baselines"`
+	TotalEvents int            `json:"total_events"`
+	Baselines   []baselineJSON `json:"baselines"`
 }
 
 type baselineJSON struct {
@@ -21,6 +21,11 @@ type baselineJSON struct {
 	MeanLatencyMs      float64 `json:"mean_latency_ms"`
 	StdDevLatencyMs    float64 `json:"stddev_latency_ms"`
 	IsReady            bool    `json:"is_ready"`
+	// Drift fields — zero/false until the detector has run at least once.
+	DriftScore     float64 `json:"drift_score"`
+	DriftAlerted   bool    `json:"drift_alerted"`
+	POutputTokens  float64 `json:"p_output_tokens"`
+	PLatencyMs     float64 `json:"p_latency_ms"`
 }
 
 // NewBaselinesHandler returns a handler for GET /api/v1/baselines.
@@ -38,13 +43,19 @@ func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		driftStates, err := db.GetDriftStates()
+		if err != nil {
+			slog.Error("api: drift states", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 
 		resp := baselinesResponse{
 			TotalEvents: total,
 			Baselines:   make([]baselineJSON, 0, len(baselines)),
 		}
 		for _, b := range baselines {
-			resp.Baselines = append(resp.Baselines, baselineJSON{
+			row := baselineJSON{
 				Model:              b.Model,
 				Count:              b.Count,
 				MeanOutputTokens:   round2(b.MeanOutputTokens),
@@ -52,7 +63,14 @@ func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 				MeanLatencyMs:      round2(b.MeanLatencyMs),
 				StdDevLatencyMs:    round2(b.StdDevLatencyMs),
 				IsReady:            b.IsReady,
-			})
+			}
+			if ds, ok := driftStates[b.Model]; ok {
+				row.DriftScore = round2(ds.Score)
+				row.DriftAlerted = ds.Alerted
+				row.POutputTokens = round2(ds.POutputTokens)
+				row.PLatencyMs = round2(ds.PLatencyMs)
+			}
+			resp.Baselines = append(resp.Baselines, row)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

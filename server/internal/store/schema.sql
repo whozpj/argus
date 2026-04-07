@@ -12,6 +12,15 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_model ON events(model, created_at);
 
+CREATE TABLE IF NOT EXISTS drift_state (
+    model              TEXT    PRIMARY KEY,
+    score              REAL    NOT NULL DEFAULT 0,
+    p_output_tokens    REAL    NOT NULL DEFAULT 1,
+    p_latency_ms       REAL    NOT NULL DEFAULT 1,
+    alerted            INTEGER NOT NULL DEFAULT 0, -- 1 when alert is active
+    checked_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS baselines (
     model              TEXT    PRIMARY KEY,
     count              INTEGER NOT NULL DEFAULT 0,
