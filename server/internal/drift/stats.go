@@ -40,12 +40,22 @@ func mannWhitneyPValue(x, y []float64) float64 {
 	return math.Erfc(z / math.Sqrt2)
 }
 
+// alpha is the family-wise error rate target for Bonferroni correction.
+// Score is calibrated so that score > 0 means Bonferroni-significant at α=0.05,
+// and score = 1 means p ≈ 0.
+const alpha = 0.05
+
 // driftScore converts per-signal p-values into a single [0, 1] score using
-// Bonferroni correction. A score near 1 means strong evidence of drift in at
-// least one signal; near 0 means no evidence.
+// Bonferroni correction, calibrated to α = 0.05.
 //
-// Method: take the minimum p-value (most significant signal), multiply by the
-// number of tests (Bonferroni), cap at 1, then invert.
+// Method:
+//   corrected_p = min(p_i) * k          (Bonferroni)
+//   score       = 1 - corrected_p / α   clamped to [0, 1]
+//
+// score = 0 means no evidence of drift (corrected_p ≥ α).
+// score = 1 means p ≈ 0 (extreme drift).
+// The alert threshold of 0.7 corresponds to corrected_p < 0.015 (< α×0.3),
+// giving a per-window false positive rate of ~1.5% for two independent signals.
 func driftScore(pValues []float64) float64 {
 	if len(pValues) == 0 {
 		return 0
@@ -58,8 +68,12 @@ func driftScore(pValues []float64) float64 {
 		}
 	}
 	corrected := minP * k
-	if corrected > 1.0 {
-		corrected = 1.0
+	score := 1.0 - corrected/alpha
+	if score < 0 {
+		return 0
 	}
-	return 1.0 - corrected
+	if score > 1 {
+		return 1
+	}
+	return score
 }
