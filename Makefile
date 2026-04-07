@@ -1,4 +1,4 @@
-.PHONY: sdk-install sdk-test sdk-lint server-build ui-install ui-dev
+.PHONY: sdk-install sdk-test sdk-lint server-build server-test ui-install ui-dev ui-build ui-typecheck docker-build test install
 
 # ── SDK ───────────────────────────────────────────────
 sdk-install:
@@ -24,5 +24,18 @@ ui-install:
 ui-dev:
 	cd ui && npm run dev
 
+ui-build:
+	cd ui && npm run build
+
+ui-typecheck:
+	cd ui && npx tsc --noEmit
+
+# ── Docker ────────────────────────────────────────────
+docker-build:
+	docker build -f deploy/Dockerfile -t argus .
+
 # ── All ───────────────────────────────────────────────
+test: sdk-test server-test
+	@echo "All tests passed."
+
 install: sdk-install ui-install
