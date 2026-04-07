@@ -1,0 +1,9 @@
+**/.git
+**/.venv
+**/node_modules
+**/sdk/tests
+ui/.next
+server/bin
+*.db
+*.docx
+CLAUDE.md
