@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/whozpj/argus/server/internal/alerts"
+	"github.com/whozpj/argus/server/internal/api"
 	"github.com/whozpj/argus/server/internal/drift"
 	"github.com/whozpj/argus/server/internal/ingest"
 	"github.com/whozpj/argus/server/internal/store"
@@ -31,6 +32,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/events", ingest.NewHandler(db))
+	mux.HandleFunc("GET /api/v1/baselines", api.NewBaselinesHandler(db))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
