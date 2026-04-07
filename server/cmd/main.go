@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/whozpj/argus/server/internal/drift"
 	"github.com/whozpj/argus/server/internal/ingest"
 	"github.com/whozpj/argus/server/internal/store"
 )
@@ -19,6 +20,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	go drift.New(db, drift.Interval).Run()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/events", ingest.NewHandler(db))
