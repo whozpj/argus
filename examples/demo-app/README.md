@@ -11,14 +11,21 @@ Two scripts that show Argus working end-to-end.
 
 ## Quick demo (no API keys needed)
 
-**Terminal 1 — start the Argus server:**
+**Terminal 1 — start the Argus API server (port 4000):**
 
 ```bash
 cd ../../server
 go run ./cmd/main.go
 ```
 
-**Terminal 2 — run the simulator:**
+**Terminal 2 — start the dashboard (port 3000):**
+
+```bash
+cd ../../ui
+npm run dev
+```
+
+**Terminal 3 — run the simulator:**
 
 ```bash
 python simulate.py

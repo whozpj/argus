@@ -206,15 +206,22 @@ docker build -f deploy/Dockerfile -t argus .
 
 The `examples/demo-app/` directory contains a simulator that sends synthetic events to Argus so you can see the dashboard and drift detection working without any LLM API keys.
 
+**You need three terminals:**
+
 ```bash
-# Terminal 1 — start the server
+# Terminal 1 — Go API server (port 4000)
 cd server && go run ./cmd/main.go
 
-# Terminal 2 — run the simulator (250 baseline + drift events per model, ~12s)
+# Terminal 2 — Next.js dashboard (port 3000) ← easy to miss
+cd ui && npm run dev
+
+# Terminal 3 — send synthetic events
 cd examples/demo-app && python simulate.py
 ```
 
 Then open [http://localhost:3000](http://localhost:3000) and wait up to 60 seconds to see `DRIFT DETECTED` in the server logs.
+
+> **Note:** `localhost:3000` is the dashboard (Next.js). `localhost:4000` is the API server (Go). Both must be running — the simulator only starts the Go server, not the dashboard.
 
 See [examples/demo-app/README.md](examples/demo-app/README.md) for full usage.
 
