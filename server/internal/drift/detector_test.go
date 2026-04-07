@@ -4,8 +4,33 @@ import (
 	"testing"
 	"time"
 
+	"github.com/whozpj/argus/server/internal/alerts"
 	"github.com/whozpj/argus/server/internal/store"
 )
+
+// noopNotifier satisfies alerts.Notifier without doing anything.
+type noopNotifier struct{}
+
+func (noopNotifier) Fire(string, float64, float64, float64) error { return nil }
+func (noopNotifier) Clear(string) error                           { return nil }
+
+// spyNotifier records calls for assertion in tests.
+type spyNotifier struct {
+	fired  []string // model names passed to Fire
+	cleared []string // model names passed to Clear
+}
+
+func (s *spyNotifier) Fire(model string, _, _, _ float64) error {
+	s.fired = append(s.fired, model)
+	return nil
+}
+func (s *spyNotifier) Clear(model string) error {
+	s.cleared = append(s.cleared, model)
+	return nil
+}
+
+var _ alerts.Notifier = noopNotifier{}
+var _ alerts.Notifier = &spyNotifier{}
 
 func openTestDB(t *testing.T) *store.DB {
 	t.Helper()
@@ -48,7 +73,7 @@ func TestRunOnce_SkipsModelsWithTooFewRecentEvents(t *testing.T) {
 	seedEvents(t, db, "model-a", 200, 50, 200) // builds baseline to is_ready=1
 	seedEvents(t, db, "model-a", 5, 50, 200)   // only 5 recent — below minRecentN
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	result := d.checkModel("model-a")
 
 	if result.Score != 0 {
@@ -61,7 +86,7 @@ func TestRunOnce_NoDriftForIdenticalDistributions(t *testing.T) {
 	// 200 events build the baseline (is_ready=1); 50 more are the "recent" window.
 	seedEvents(t, db, "gpt-4o", 250, 50, 200)
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	result := d.checkModel("gpt-4o")
 
 	if result.Score > 0.3 {
@@ -78,7 +103,7 @@ func TestRunOnce_DriftDetectedForShiftedDistribution(t *testing.T) {
 	seedEvents(t, db, "claude-sonnet-4-6", 200, 50, 200)
 	seedEvents(t, db, "claude-sonnet-4-6", 50, 500, 200)
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	result := d.checkModel("claude-sonnet-4-6")
 
 	if result.Score < 0.7 {
@@ -93,7 +118,7 @@ func TestRunOnce_ScoreInRange(t *testing.T) {
 	db := openTestDB(t)
 	seedEvents(t, db, "model-x", 250, 50, 200)
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	result := d.checkModel("model-x")
 
 	if result.Score < 0 || result.Score > 1 {
@@ -110,7 +135,7 @@ func TestHysteresis_AlertFiresOnce(t *testing.T) {
 	seedEvents(t, db, "model-h", 200, 50, 200)
 	seedEvents(t, db, "model-h", 50, 500, 200) // drifted
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 
 	r1 := d.checkModel("model-h")
 	r2 := d.checkModel("model-h") // second window — still drifted
@@ -129,7 +154,7 @@ func TestHysteresis_AlertClearsAfterThreeGoodWindows(t *testing.T) {
 	seedEvents(t, db, model, 200, 50, 200)
 	seedEvents(t, db, model, 50, 500, 200) // trigger drift
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	d.checkModel(model) // fires alert
 
 	// Now insert 50 more events matching the baseline distribution.
@@ -154,7 +179,7 @@ func TestHysteresis_ClearCountResetsIfDriftReturns(t *testing.T) {
 	seedEvents(t, db, model, 200, 50, 200)
 	seedEvents(t, db, model, 50, 500, 200) // trigger
 
-	d := New(db, time.Hour)
+	d := New(db, time.Hour, noopNotifier{})
 	d.checkModel(model) // alerted
 
 	// One "good" window — partially into clearing.
@@ -192,6 +217,73 @@ func TestFloats_Empty(t *testing.T) {
 	got := floats(nil, func(e store.Event) float64 { return float64(e.OutputTokens) })
 	if len(got) != 0 {
 		t.Errorf("floats(nil) = %v, want []", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Notifier integration
+// ---------------------------------------------------------------------------
+
+func TestNotifier_FireCalledOnAlert(t *testing.T) {
+	db := openTestDB(t)
+	seedEvents(t, db, "model-n", 200, 50, 200)
+	seedEvents(t, db, "model-n", 50, 500, 200) // drifted
+
+	spy := &spyNotifier{}
+	d := New(db, time.Hour, spy)
+	d.checkModel("model-n")
+
+	if len(spy.fired) != 1 || spy.fired[0] != "model-n" {
+		t.Errorf("Fire not called correctly: fired=%v", spy.fired)
+	}
+}
+
+func TestNotifier_FireNotCalledWhenNoDrift(t *testing.T) {
+	db := openTestDB(t)
+	seedEvents(t, db, "model-ok", 250, 50, 200) // identical baseline + recent
+
+	spy := &spyNotifier{}
+	d := New(db, time.Hour, spy)
+	d.checkModel("model-ok")
+
+	if len(spy.fired) != 0 {
+		t.Errorf("Fire should not be called when there is no drift: fired=%v", spy.fired)
+	}
+}
+
+func TestNotifier_ClearCalledAfterResolution(t *testing.T) {
+	db := openTestDB(t)
+	model := "model-resolve"
+	seedEvents(t, db, model, 200, 50, 200)
+	seedEvents(t, db, model, 50, 500, 200) // trigger
+
+	spy := &spyNotifier{}
+	d := New(db, time.Hour, spy)
+	d.checkModel(model) // fires alert
+
+	seedEvents(t, db, model, 50, 50, 200) // slide window back to normal
+	for i := 0; i < clearWindows; i++ {
+		d.checkModel(model)
+	}
+
+	if len(spy.cleared) != 1 || spy.cleared[0] != model {
+		t.Errorf("Clear not called correctly: cleared=%v", spy.cleared)
+	}
+}
+
+func TestNotifier_FireCalledOnceNotRepeatedly(t *testing.T) {
+	db := openTestDB(t)
+	seedEvents(t, db, "model-once", 200, 50, 200)
+	seedEvents(t, db, "model-once", 50, 500, 200)
+
+	spy := &spyNotifier{}
+	d := New(db, time.Hour, spy)
+	d.checkModel("model-once")
+	d.checkModel("model-once") // second window — still drifted
+	d.checkModel("model-once") // third
+
+	if len(spy.fired) != 1 {
+		t.Errorf("Fire should be called exactly once, got %d calls", len(spy.fired))
 	}
 }
 

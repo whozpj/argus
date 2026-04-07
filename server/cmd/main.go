@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/whozpj/argus/server/internal/alerts"
 	"github.com/whozpj/argus/server/internal/drift"
 	"github.com/whozpj/argus/server/internal/ingest"
 	"github.com/whozpj/argus/server/internal/store"
@@ -21,7 +22,12 @@ func main() {
 	}
 	defer db.Close()
 
-	go drift.New(db, drift.Interval).Run()
+	var notifier alerts.Notifier = alerts.Noop{}
+	if webhook := getenv("ARGUS_SLACK_WEBHOOK", ""); webhook != "" {
+		notifier = alerts.NewSlack(webhook)
+		slog.Info("slack alerts enabled")
+	}
+	go drift.New(db, drift.Interval, notifier).Run()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/events", ingest.NewHandler(db))

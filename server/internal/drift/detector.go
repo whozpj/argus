@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/whozpj/argus/server/internal/alerts"
 	"github.com/whozpj/argus/server/internal/store"
 )
 
@@ -25,14 +26,17 @@ type modelState struct {
 // Detector runs drift detection on a periodic ticker.
 type Detector struct {
 	db       *store.DB
+	notifier alerts.Notifier
 	states   map[string]*modelState
 	interval time.Duration
 }
 
 // New returns a Detector. Pass a custom interval for tests; use Interval for production.
-func New(db *store.DB, interval time.Duration) *Detector {
+// notifier receives Fire/Clear calls; pass alerts.Noop{} to disable.
+func New(db *store.DB, interval time.Duration, notifier alerts.Notifier) *Detector {
 	return &Detector{
 		db:       db,
+		notifier: notifier,
 		states:   make(map[string]*modelState),
 		interval: interval,
 	}
@@ -111,6 +115,9 @@ func (d *Detector) checkModel(model string) DriftResult {
 		state.clearCount = 0
 		result.AlertFired = true
 		slog.Warn("DRIFT DETECTED", "model", model, "score", score)
+		if err := d.notifier.Fire(model, score, pOut, pLat); err != nil {
+			slog.Error("drift: send alert", "model", model, "err", err)
+		}
 
 	case state.alerted && score < clearThreshold:
 		state.clearCount++
@@ -119,6 +126,9 @@ func (d *Detector) checkModel(model string) DriftResult {
 			state.clearCount = 0
 			result.AlertCleared = true
 			slog.Info("drift cleared", "model", model)
+			if err := d.notifier.Clear(model); err != nil {
+				slog.Error("drift: send clear", "model", model, "err", err)
+			}
 		}
 
 	case state.alerted:
