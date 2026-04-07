@@ -37,6 +37,9 @@ Thumbs.db
 *.db-shm
 *.db-wal
 
+# ── Claude context (local only) ───────────────────────
+CLAUDE.md
+
 # ── Reference docs (not source code) ─────────────────
 *.docx
 *.pdf
