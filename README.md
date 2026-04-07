@@ -11,7 +11,15 @@ Works with Anthropic, OpenAI, and any OpenAI-compatible provider. Self-hosted, n
 **1. Run the Argus container**
 
 ```bash
-docker run -p 4000:4000 -v argus_data:/data argus/argus
+docker run -p 4000:4000 -p 3000:3000 -v argus_data:/data argus/argus
+```
+
+Optional — enable Slack alerts:
+
+```bash
+docker run -p 4000:4000 -p 3000:3000 \
+  -e ARGUS_SLACK_WEBHOOK=https://hooks.slack.com/services/... \
+  -v argus_data:/data argus/argus
 ```
 
 **2. Install the SDK**
@@ -49,7 +57,7 @@ client = anthropic.Anthropic()
 patch(endpoint="http://localhost:4000", client=client)  # only this instance
 ```
 
-Open [localhost:4000](http://localhost:4000) to see your dashboard.
+Open [localhost:3000](http://localhost:3000) to see your dashboard.
 
 ## System Design
 
@@ -107,17 +115,32 @@ No prompt text or completion text ever leaves your app — only derived signals 
 Requirements: Python 3.12+, Go 1.26+, Node 20+, Docker
 
 ```bash
-make sdk-install   # set up Python SDK
-make server-build  # build Go server
-make ui-install    # install dashboard deps
+make sdk-install   # create sdk/.venv and install deps
+make sdk-test      # run pytest
+make server-build  # go build → server/bin/argus
+make ui-install    # npm install in ui/
+
+# Run locally (two terminals)
+cd server && go run ./cmd/main.go   # API on :4000
+cd ui && npm run dev                 # dashboard on :3000
+
+# Build the Docker image from repo root
+docker build -f deploy/Dockerfile -t argus .
 ```
 
 ## Project Structure
 
 ```
-sdk/        Python package (pip install argus-sdk)
-server/     Go server — ingest, drift detection, SQLite
-ui/         Next.js dashboard
-deploy/     Dockerfile
-docs/       Documentation
+sdk/          Python package — pip install argus-sdk
+server/       Go server — ingest, baselines, drift detection, Slack alerts
+  cmd/        main.go entrypoint
+  internal/
+    ingest/   POST /api/v1/events handler
+    store/    SQLite DAL (events, baselines, queries)
+    drift/    Mann-Whitney U, Bonferroni, hysteresis detector
+    alerts/   Slack webhook notifier
+    api/      GET /api/v1/baselines handler
+ui/           Next.js 14 dashboard (TypeScript, Tailwind, shadcn/ui)
+deploy/       Dockerfile + pm2 ecosystem config
+docs/         Documentation
 ```
