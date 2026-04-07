@@ -6,6 +6,11 @@ export interface BaselineModel {
   mean_latency_ms: number;
   stddev_latency_ms: number;
   is_ready: boolean;
+  // Drift — zero/false until the detector has run at least once
+  drift_score: number;
+  drift_alerted: boolean;
+  p_output_tokens: number;
+  p_latency_ms: number;
 }
 
 export interface BaselinesResponse {
