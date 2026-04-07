@@ -128,6 +128,24 @@ cd ui && npm run dev                 # dashboard on :3000
 docker build -f deploy/Dockerfile -t argus .
 ```
 
+## Try it without API keys
+
+The `examples/demo-app/` directory contains a simulator that sends synthetic events to Argus so you can see the dashboard and drift detection working without any LLM API keys.
+
+```bash
+# Terminal 1 — start the server
+cd server && go run ./cmd/main.go
+
+# Terminal 2 — run the simulator (250 baseline + drift events per model, ~12s)
+cd examples/demo-app && python simulate.py
+```
+
+Then open [http://localhost:3000](http://localhost:3000) and wait up to 60 seconds to see `DRIFT DETECTED` in the server logs.
+
+See [examples/demo-app/README.md](examples/demo-app/README.md) for full usage.
+
+---
+
 ## Publishing the SDK to PyPI
 
 When you're ready to release `argus-sdk`:
