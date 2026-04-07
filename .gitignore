@@ -1,0 +1,42 @@
+# ── Python ────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ── Go ────────────────────────────────────────────────
+server/bin/
+*.exe
+*.test
+
+# ── Node / Next.js ────────────────────────────────────
+ui/node_modules/
+ui/.next/
+ui/out/
+ui/.env.local
+
+# ── General ───────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# ── SQLite (runtime data, not schema) ─────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Reference docs (not source code) ─────────────────
+*.docx
+*.pdf
