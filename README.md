@@ -128,6 +128,51 @@ cd ui && npm run dev                 # dashboard on :3000
 docker build -f deploy/Dockerfile -t argus .
 ```
 
+## Publishing the SDK to PyPI
+
+When you're ready to release `argus-sdk`:
+
+**1. Bump the version** in [sdk/pyproject.toml](sdk/pyproject.toml):
+
+```toml
+[project]
+version = "0.1.0"   # → 0.2.0, etc.
+```
+
+**2. Build the distribution:**
+
+```bash
+cd sdk
+source .venv/bin/activate
+pip install build twine
+python -m build         # creates dist/argus_sdk-*.whl and dist/argus_sdk-*.tar.gz
+```
+
+**3. Upload to PyPI:**
+
+```bash
+# Test first (free account at test.pypi.org)
+twine upload --repository testpypi dist/*
+
+# Production
+twine upload dist/*
+```
+
+You'll need a PyPI account and an API token. Set it once:
+
+```bash
+# ~/.pypirc  (or use TWINE_PASSWORD env var in CI)
+[pypi]
+  username = __token__
+  password = pypi-...
+```
+
+After publishing, users install with:
+
+```bash
+pip install argus-sdk
+```
+
 ## Project Structure
 
 ```
