@@ -58,6 +58,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.db.UpdateBaseline(req.Model, req.OutputTokens, req.LatencyMs); err != nil {
+		slog.Error("update baseline", "err", err, "model", req.Model)
+		// Non-fatal: event is saved; don't reject the request over a baseline failure.
+	}
+
 	slog.Info("event received", "model", req.Model, "output_tokens", req.OutputTokens, "latency_ms", req.LatencyMs)
 	w.WriteHeader(http.StatusAccepted)
 }
