@@ -8,20 +8,45 @@ Works with Anthropic, OpenAI, and any OpenAI-compatible provider. Self-hosted, n
 
 ## Quick Start
 
+**1. Run the Argus container**
+
 ```bash
 docker run -p 4000:4000 -v argus_data:/data argus/argus
 ```
+
+**2. Install the SDK**
 
 ```bash
 pip install argus-sdk
 ```
 
+**3. Add one line to your app**
+
+Call `patch()` once before you create your LLM client. Every client you create afterwards is automatically instrumented — no other changes needed.
+
 ```python
 from argus_sdk import patch
 patch(endpoint="http://localhost:4000")
 
+# Anthropic — unchanged
 import anthropic
-client = anthropic.Anthropic()  # unchanged from here
+client = anthropic.Anthropic()
+response = client.messages.create(...)  # signals sent to Argus in background
+
+# OpenAI — unchanged
+import openai
+client = openai.OpenAI()
+response = client.chat.completions.create(...)  # signals sent to Argus in background
+```
+
+If you prefer to instrument a specific client instance rather than all clients:
+
+```python
+import anthropic
+from argus_sdk import patch
+
+client = anthropic.Anthropic()
+patch(endpoint="http://localhost:4000", client=client)  # only this instance
 ```
 
 Open [localhost:4000](http://localhost:4000) to see your dashboard.
@@ -79,7 +104,7 @@ No prompt text or completion text ever leaves your app — only derived signals 
 
 ## Development
 
-Requirements: Python 3.12+, Go 1.23+, Node 20+, Docker
+Requirements: Python 3.12+, Go 1.26+, Node 20+, Docker
 
 ```bash
 make sdk-install   # set up Python SDK
