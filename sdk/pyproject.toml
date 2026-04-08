@@ -4,8 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "argus-sdk"
-version = "0.1.0"
-description = "Drop-in LLM behavioral drift detection"
+version = "0.1.2"
+description = "Detect when your LLM's behavior has statistically shifted — one line of code to instrument, one Docker container to run."
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.25",
