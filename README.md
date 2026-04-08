@@ -276,6 +276,24 @@ After publishing, users install with:
 pip install argus-sdk
 ```
 
+## Next Steps — Argus Cloud
+
+The next major version moves Argus from self-hosted to a managed cloud platform hosted on AWS. The goal is to remove all infrastructure burden from the developer — no Docker, no SQLite, no server to maintain.
+
+**User accounts and projects**
+Developers sign up and create projects, each with its own ingest key. All events, baselines, and drift history are stored per-project in the cloud. Teams can share a project dashboard without running anything locally.
+
+**CLI authentication**
+The `argus` CLI will support `argus login` to authenticate against the cloud platform and `argus status` to view live drift results from the terminal without opening a browser.
+
+**Remote dashboard**
+Each project gets a hosted dashboard URL. Drift alerts, baseline charts, and event history are accessible from anywhere — no port forwarding, no VPN.
+
+**AWS infrastructure**
+The platform will run on AWS with an API Gateway and Lambda for ingest, RDS (PostgreSQL) for storage, and CloudFront in front of the dashboard. The SDK will point to the cloud endpoint by default, with self-hosted remaining supported for users who need it.
+
+---
+
 ## Project Structure
 
 ```
