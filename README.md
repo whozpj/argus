@@ -4,7 +4,7 @@
 
 Argus tells you when your LLM's behavior has changed ... before your users do.
 
-Wrap your existing client with one line. Run one Docker container. Get a live dashboard showing statistical drift across token counts, latency, refusal rates, and output length. Fires a Slack alert when something shifts.
+Wrap your existing client with **one** line. Run **one** Docker container. Get a live dashboard showing statistical drift across token counts, latency, refusal rates, and output length. Fires a Slack alert when something shifts.
 
 Works with Anthropic, OpenAI, and any OpenAI-compatible provider. Self-hosted, no data leaves your machine.
 
