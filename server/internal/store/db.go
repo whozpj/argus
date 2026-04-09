@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 //go:embed schema.sql
@@ -15,10 +15,15 @@ type DB struct {
 	sql *sql.DB
 }
 
-func Open(path string) (*DB, error) {
-	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on")
+// Open connects to a Postgres database at the given DSN and applies the schema.
+// DSN example: "postgres://user:pass@localhost:5432/argus?sslmode=disable"
+func Open(dsn string) (*DB, error) {
+	conn, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+		return nil, fmt.Errorf("open postgres: %w", err)
+	}
+	if err := conn.Ping(); err != nil {
+		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 	if _, err := conn.Exec(schema); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
@@ -32,6 +37,7 @@ func (d *DB) Close() error {
 
 // Event is one captured LLM request/response signal.
 type Event struct {
+	ProjectID    string
 	Model        string
 	Provider     string
 	InputTokens  int
@@ -43,18 +49,19 @@ type Event struct {
 
 func (d *DB) InsertEvent(e Event) error {
 	_, err := d.sql.Exec(`
-		INSERT INTO events (model, provider, input_tokens, output_tokens, latency_ms, finish_reason, timestamp_utc)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		e.Model, e.Provider, e.InputTokens, e.OutputTokens, e.LatencyMs, e.FinishReason, e.TimestampUTC,
+		INSERT INTO events (project_id, model, provider, input_tokens, output_tokens, latency_ms, finish_reason, timestamp_utc)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		e.ProjectID, e.Model, e.Provider, e.InputTokens, e.OutputTokens, e.LatencyMs, e.FinishReason, e.TimestampUTC,
 	)
 	return err
 }
 
-// RecentEvents returns the last n events for a model, newest first.
-func (d *DB) RecentEvents(model string, n int) ([]Event, error) {
+// RecentEvents returns the last n events for a model within a project, newest first.
+func (d *DB) RecentEvents(projectID, model string, n int) ([]Event, error) {
 	rows, err := d.sql.Query(`
-		SELECT model, provider, input_tokens, output_tokens, latency_ms, finish_reason, timestamp_utc
-		FROM events WHERE model = ? ORDER BY created_at DESC LIMIT ?`, model, n)
+		SELECT project_id, model, provider, input_tokens, output_tokens, latency_ms, finish_reason, timestamp_utc
+		FROM events WHERE project_id = $1 AND model = $2 ORDER BY created_at DESC LIMIT $3`,
+		projectID, model, n)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +70,7 @@ func (d *DB) RecentEvents(model string, n int) ([]Event, error) {
 	var events []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.Model, &e.Provider, &e.InputTokens, &e.OutputTokens, &e.LatencyMs, &e.FinishReason, &e.TimestampUTC); err != nil {
+		if err := rows.Scan(&e.ProjectID, &e.Model, &e.Provider, &e.InputTokens, &e.OutputTokens, &e.LatencyMs, &e.FinishReason, &e.TimestampUTC); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
