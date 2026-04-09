@@ -54,7 +54,7 @@ func (d *Detector) Run() {
 // RunOnce executes one detection pass across all ready models.
 // Exported so tests can trigger it directly without waiting for the ticker.
 func (d *Detector) RunOnce() {
-	models, err := d.db.ReadyModels()
+	models, err := d.db.ReadyModels("self-hosted")
 	if err != nil {
 		slog.Error("drift: list ready models", "err", err)
 		return
@@ -77,12 +77,12 @@ type DriftResult struct {
 func (d *Detector) checkModel(model string) DriftResult {
 	result := DriftResult{Model: model}
 
-	baseline, err := d.db.BaselineSample(model, baselineN)
+	baseline, err := d.db.BaselineSample("self-hosted", model, baselineN)
 	if err != nil {
 		slog.Error("drift: baseline sample", "model", model, "err", err)
 		return result
 	}
-	recent, err := d.db.RecentSample(model, recentN)
+	recent, err := d.db.RecentSample("self-hosted", model, recentN)
 	if err != nil {
 		slog.Error("drift: recent sample", "model", model, "err", err)
 		return result
@@ -137,7 +137,7 @@ func (d *Detector) checkModel(model string) DriftResult {
 	}
 
 	// Persist after hysteresis so Alerted reflects the current window's outcome.
-	if err := d.db.UpsertDriftState(store.DriftState{
+	if err := d.db.UpsertDriftState("self-hosted", store.DriftState{
 		Model:         model,
 		Score:         score,
 		POutputTokens: pOut,
