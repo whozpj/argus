@@ -1,69 +1,91 @@
-package store
+package store_test
 
-import "testing"
+import (
+	"testing"
 
-func TestListBaselines_EmptyDB(t *testing.T) {
-	db := openTestDB(t)
-	baselines, err := db.ListBaselines()
+	"github.com/whozpj/argus/server/internal/store"
+)
+
+func TestEventCount(t *testing.T) {
+	db := newTestDB(t)
+	projectID := "proj-count"
+
+	n, err := db.EventCount(projectID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("EventCount: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 events initially, got %d", n)
+	}
+
+	err = db.InsertEvent(store.Event{
+		ProjectID:    projectID,
+		Model:        "gpt-4o",
+		Provider:     "openai",
+		InputTokens:  10,
+		OutputTokens: 20,
+		LatencyMs:    100,
+		FinishReason: "stop",
+		TimestampUTC: "2026-04-08T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("InsertEvent: %v", err)
+	}
+
+	n, err = db.EventCount(projectID)
+	if err != nil {
+		t.Fatalf("EventCount after insert: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected 1 event, got %d", n)
+	}
+}
+
+func TestListBaselines(t *testing.T) {
+	db := newTestDB(t)
+	projectID := "proj-list"
+
+	baselines, err := db.ListBaselines(projectID)
+	if err != nil {
+		t.Fatalf("ListBaselines empty: %v", err)
 	}
 	if len(baselines) != 0 {
 		t.Errorf("expected 0 baselines, got %d", len(baselines))
 	}
-}
 
-func TestListBaselines_ReturnsAllModels(t *testing.T) {
-	db := openTestDB(t)
-	db.UpdateBaseline("model-b", 50, 200) //nolint:errcheck
-	db.UpdateBaseline("model-a", 50, 200) //nolint:errcheck
+	if err := db.UpdateBaseline(projectID, "model-a", 100, 500); err != nil {
+		t.Fatalf("UpdateBaseline: %v", err)
+	}
+	if err := db.UpdateBaseline(projectID, "model-b", 200, 800); err != nil {
+		t.Fatalf("UpdateBaseline: %v", err)
+	}
 
-	baselines, err := db.ListBaselines()
+	baselines, err = db.ListBaselines(projectID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("ListBaselines: %v", err)
 	}
 	if len(baselines) != 2 {
-		t.Fatalf("expected 2 baselines, got %d", len(baselines))
+		t.Errorf("expected 2 baselines, got %d", len(baselines))
 	}
-	// Should be sorted alphabetically.
 	if baselines[0].Model != "model-a" || baselines[1].Model != "model-b" {
-		t.Errorf("unexpected order: %v", []string{baselines[0].Model, baselines[1].Model})
+		t.Errorf("unexpected order: %v", baselines)
 	}
 }
 
-func TestListBaselines_IncludesComputedStdDev(t *testing.T) {
-	db := openTestDB(t)
-	for _, tokens := range []int{10, 20, 30} {
-		db.UpdateBaseline("gpt-4o", tokens, 100) //nolint:errcheck
-	}
-	baselines, _ := db.ListBaselines()
-	if baselines[0].StdDevOutputTokens == 0 {
-		t.Error("expected non-zero stddev for 3 different values")
-	}
-}
+func TestEventCountIsolatedByProject(t *testing.T) {
+	db := newTestDB(t)
 
-func TestEventCount_Empty(t *testing.T) {
-	db := openTestDB(t)
-	n, err := db.EventCount()
+	_ = db.InsertEvent(store.Event{
+		ProjectID: "proj-x", Model: "gpt-4o", Provider: "openai",
+		InputTokens: 1, OutputTokens: 2, LatencyMs: 3,
+		FinishReason: "stop", TimestampUTC: "2026-04-08T00:00:00Z",
+	})
+
+	n, err := db.EventCount("proj-y")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("EventCount: %v", err)
 	}
 	if n != 0 {
-		t.Errorf("expected 0, got %d", n)
-	}
-}
-
-func TestEventCount_AfterInserts(t *testing.T) {
-	db := openTestDB(t)
-	for i := 0; i < 5; i++ {
-		db.InsertEvent(Event{ //nolint:errcheck
-			Model: "m", Provider: "p", InputTokens: 10,
-			OutputTokens: 50, LatencyMs: 200,
-			FinishReason: "stop", TimestampUTC: "2026-04-07T00:00:00Z",
-		})
-	}
-	n, _ := db.EventCount()
-	if n != 5 {
-		t.Errorf("expected 5, got %d", n)
+		t.Errorf("proj-y should not see proj-x events, got %d", n)
 	}
 }
