@@ -13,10 +13,10 @@ import (
 )
 
 func main() {
-	dbPath := getenv("ARGUS_DB_PATH", "argus.db")
+	dsn := getenv("POSTGRES_URL", "postgres://argus:argus@localhost:5432/argus?sslmode=disable")
 	addr := getenv("ARGUS_ADDR", ":4000")
 
-	db, err := store.Open(dbPath)
+	db, err := store.Open(dsn)
 	if err != nil {
 		slog.Error("open database", "err", err)
 		os.Exit(1)
@@ -37,7 +37,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	slog.Info("argus server starting", "addr", addr, "db", dbPath)
+	slog.Info("argus server starting", "addr", addr, "dsn", dsn)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
