@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/whozpj/argus/server/internal/auth"
 	"github.com/whozpj/argus/server/internal/store"
 )
 
@@ -43,8 +44,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// projectID is resolved by ResolveProject middleware; defaults to "self-hosted".
+	projectID, ok := auth.ProjectIDFromContext(r.Context())
+	if !ok {
+		projectID = "self-hosted"
+	}
+
 	err := h.db.InsertEvent(store.Event{
-		ProjectID:    "self-hosted",
+		ProjectID:    projectID,
 		Model:        req.Model,
 		Provider:     req.Provider,
 		InputTokens:  req.InputTokens,
@@ -59,11 +66,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.db.UpdateBaseline("self-hosted", req.Model, req.OutputTokens, req.LatencyMs); err != nil {
+	if err := h.db.UpdateBaseline(projectID, req.Model, req.OutputTokens, req.LatencyMs); err != nil {
 		slog.Error("update baseline", "err", err, "model", req.Model)
 		// Non-fatal: event is saved; don't reject the request over a baseline failure.
 	}
 
-	slog.Info("event received", "model", req.Model, "output_tokens", req.OutputTokens, "latency_ms", req.LatencyMs)
+	slog.Info("event received", "model", req.Model, "project", projectID,
+		"output_tokens", req.OutputTokens, "latency_ms", req.LatencyMs)
 	w.WriteHeader(http.StatusAccepted)
 }
