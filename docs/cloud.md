@@ -11,7 +11,7 @@ This document covers the `cloud` branch, which migrates Argus from SQLite to Pos
 | Database | SQLite (single file) | PostgreSQL |
 | DB connection | `ARGUS_DB_PATH` env var | `POSTGRES_URL` env var |
 | Data isolation | Single global namespace | Per-project via `project_id` |
-| Auth | None | Tables ready; hardcoded `"self-hosted"` for now |
+| Auth | None | JWT + GitHub/Google OAuth + API key middleware (Plan 2 complete) |
 
 ---
 
@@ -45,6 +45,12 @@ The schema is applied automatically on startup. No migrations to run manually.
 | `POSTGRES_URL` | `postgres://argus:argus@localhost:5432/argus?sslmode=disable` | Postgres connection string |
 | `ARGUS_ADDR` | `:4000` | Server listen address |
 | `ARGUS_SLACK_WEBHOOK` | _(empty)_ | Slack webhook URL for drift alerts |
+| `JWT_SECRET` | `dev-secret-change-in-production` | HS256 signing key — **change in production** |
+| `ARGUS_BASE_URL` | `http://localhost:4000` | Public base URL used to construct OAuth redirect URIs |
+| `GITHUB_CLIENT_ID` | _(empty)_ | GitHub OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | _(empty)_ | GitHub OAuth app client secret |
+| `GOOGLE_CLIENT_ID` | _(empty)_ | Google OAuth app client ID |
+| `GOOGLE_CLIENT_SECRET` | _(empty)_ | Google OAuth app client secret |
 
 `ARGUS_DB_PATH` is gone — the server no longer uses SQLite.
 
@@ -65,7 +71,7 @@ Four new tables for the upcoming auth system:
 - `api_keys (id, project_id, key_hash, key_prefix, name, created_at)`
 - `oauth_sessions (code, user_id, expires_at)` — short-lived codes for CLI login
 
-All data is currently scoped to a hardcoded project ID `"self-hosted"`. Real API key resolution comes in Plan 2.
+Requests with a valid `argus_sk_…` API key are scoped to that key's project. Unauthenticated requests fall back to the `"self-hosted"` project.
 
 ---
 
@@ -91,8 +97,8 @@ ok   github.com/whozpj/argus/server/internal/store
 
 ## What's next (upcoming plans)
 
-**Plan 2 — Auth & API Keys**
-JWT middleware, GitHub + Google OAuth endpoints (`/auth/github`, `/auth/google`), API key generation and validation, `/api/v1/me`, `/api/v1/projects`, `/api/v1/projects/:id/keys`.
+**Plan 2 — Auth & API Keys** ✅ Done
+JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key generation + validation, /api/v1/me, /api/v1/projects, /api/v1/projects/:id/keys, /api/v1/auth/token (CLI code exchange).
 
 **Plan 3 — SDK + CLI**
 `api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands.
