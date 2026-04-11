@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +67,7 @@ func TestAuthHandlers_GoogleLoginRedirects(t *testing.T) {
 }
 
 func TestAuthHandlers_TokenExchange_Success(t *testing.T) {
-	os.Setenv("JWT_SECRET", "handler-test-secret")
+	t.Setenv("JWT_SECRET", "handler-test-secret")
 	db := newTestDB(t)
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, db, auth.OAuthConfig{BaseURL: "http://localhost:4000"})
@@ -131,7 +130,7 @@ func TestAuthHandlers_TokenExchange_InvalidCode(t *testing.T) {
 }
 
 func TestAuthHandlers_TokenExchange_CodeConsumedOnce(t *testing.T) {
-	os.Setenv("JWT_SECRET", "handler-test-secret2")
+	t.Setenv("JWT_SECRET", "handler-test-secret2")
 	db := newTestDB(t)
 	mux := http.NewServeMux()
 	auth.RegisterRoutes(mux, db, auth.OAuthConfig{BaseURL: "http://localhost:4000"})

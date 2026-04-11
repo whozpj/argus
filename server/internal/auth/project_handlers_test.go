@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ func jwtHeader(t *testing.T, userID string) string {
 }
 
 func TestProjectHandlers_Me(t *testing.T) {
-	os.Setenv("JWT_SECRET", "proj-test-secret")
+	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)
 	userID, err := db.UpsertUser("me@example.com", "gh-me", "")
 	if err != nil {
@@ -73,7 +72,7 @@ func TestProjectHandlers_Me_Unauthorized(t *testing.T) {
 }
 
 func TestProjectHandlers_CreateAndListProjects(t *testing.T) {
-	os.Setenv("JWT_SECRET", "proj-test-secret")
+	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)
 	userID, _ := db.UpsertUser("proj@example.com", "gh-proj", "")
 
@@ -125,7 +124,7 @@ func TestProjectHandlers_CreateAndListProjects(t *testing.T) {
 }
 
 func TestProjectHandlers_CreateProject_MissingName(t *testing.T) {
-	os.Setenv("JWT_SECRET", "proj-test-secret")
+	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)
 	userID, _ := db.UpsertUser("bad@example.com", "gh-bad", "")
 
@@ -143,7 +142,7 @@ func TestProjectHandlers_CreateProject_MissingName(t *testing.T) {
 }
 
 func TestProjectHandlers_CreateAPIKey(t *testing.T) {
-	os.Setenv("JWT_SECRET", "proj-test-secret")
+	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)
 	userID, _ := db.UpsertUser("keys@example.com", "gh-keys", "")
 	proj, _ := db.CreateProject(userID, "prod")
@@ -193,7 +192,7 @@ func TestProjectHandlers_CreateAPIKey(t *testing.T) {
 }
 
 func TestProjectHandlers_CreateAPIKey_WrongProject(t *testing.T) {
-	os.Setenv("JWT_SECRET", "proj-test-secret")
+	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)
 	// Two separate users
 	userA, _ := db.UpsertUser("userA@example.com", "gh-A", "")

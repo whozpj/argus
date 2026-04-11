@@ -3,7 +3,6 @@ package auth_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/whozpj/argus/server/internal/auth"
@@ -22,7 +21,7 @@ func TestRequireJWT_MissingToken(t *testing.T) {
 }
 
 func TestRequireJWT_ValidBearerToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "mw-test-secret")
+	t.Setenv("JWT_SECRET", "mw-test-secret")
 	tok, _ := auth.IssueToken("user-abc")
 
 	var gotUID string
@@ -45,7 +44,7 @@ func TestRequireJWT_ValidBearerToken(t *testing.T) {
 }
 
 func TestRequireJWT_ValidCookie(t *testing.T) {
-	os.Setenv("JWT_SECRET", "mw-test-secret")
+	t.Setenv("JWT_SECRET", "mw-test-secret")
 	tok, _ := auth.IssueToken("user-cookie")
 
 	var gotUID string
@@ -68,7 +67,7 @@ func TestRequireJWT_ValidCookie(t *testing.T) {
 }
 
 func TestRequireJWT_InvalidToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "mw-test-secret")
+	t.Setenv("JWT_SECRET", "mw-test-secret")
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
