@@ -44,6 +44,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.db.InsertEvent(store.Event{
+		ProjectID:    "self-hosted",
 		Model:        req.Model,
 		Provider:     req.Provider,
 		InputTokens:  req.InputTokens,
@@ -58,7 +59,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.db.UpdateBaseline(req.Model, req.OutputTokens, req.LatencyMs); err != nil {
+	if err := h.db.UpdateBaseline("self-hosted", req.Model, req.OutputTokens, req.LatencyMs); err != nil {
 		slog.Error("update baseline", "err", err, "model", req.Model)
 		// Non-fatal: event is saved; don't reject the request over a baseline failure.
 	}

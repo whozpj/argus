@@ -31,19 +31,19 @@ type baselineJSON struct {
 // NewBaselinesHandler returns a handler for GET /api/v1/baselines.
 func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		baselines, err := db.ListBaselines()
+		baselines, err := db.ListBaselines("self-hosted")
 		if err != nil {
 			slog.Error("api: list baselines", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		total, err := db.EventCount()
+		total, err := db.EventCount("self-hosted")
 		if err != nil {
 			slog.Error("api: event count", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		driftStates, err := db.GetDriftStates()
+		driftStates, err := db.GetDriftStates("self-hosted")
 		if err != nil {
 			slog.Error("api: drift states", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
