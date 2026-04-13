@@ -26,6 +26,9 @@ ui/.next/
 ui/out/
 ui/.env.local
 
+# ── Git worktrees ─────────────────────────────────────
+.worktrees/
+
 # ── General ───────────────────────────────────────────
 .env
 .env.*
