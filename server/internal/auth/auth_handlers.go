@@ -15,6 +15,7 @@ import (
 // OAuthConfig holds OAuth app credentials and the server's public base URL.
 type OAuthConfig struct {
 	BaseURL            string // e.g. "https://argus.app" or "http://localhost:4000"
+	UIURL              string // e.g. "http://localhost:3000" — browser is sent here after web OAuth
 	GitHubClientID     string
 	GitHubClientSecret string
 	GoogleClientID     string
@@ -196,9 +197,13 @@ func (h *authHandlers) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// issueJWTAndRedirect sets the argus_token cookie and redirects to the dashboard.
-// If argus_cli_redirect cookie is present (CLI login flow), creates a session code
-// and redirects the browser to the CLI's local callback server instead.
+// issueJWTAndRedirect handles the post-OAuth redirect for both CLI and web flows.
+//
+// CLI flow: if argus_cli_redirect cookie is present, creates a short-lived code
+// and sends the browser to the CLI's local callback server.
+//
+// Web flow: keeps the argus_token cookie (so /auth/cli can reuse an existing session),
+// then creates a short-lived code and sends the browser to the UI's /auth/callback page.
 func (h *authHandlers) issueJWTAndRedirect(w http.ResponseWriter, r *http.Request, userID string) {
 	tok, err := IssueToken(userID)
 	if err != nil {
@@ -206,6 +211,7 @@ func (h *authHandlers) issueJWTAndRedirect(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	// Keep the server-side cookie so /auth/cli can skip re-auth on repeat CLI logins.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "argus_token",
 		Value:    tok,
@@ -214,13 +220,20 @@ func (h *authHandlers) issueJWTAndRedirect(w http.ResponseWriter, r *http.Reques
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
+
+	// CLI flow — redirect back to the CLI's local callback server.
 	if c, err := r.Cookie("argus_cli_redirect"); err == nil {
-		// Clear the cookie and redirect the CLI
 		http.SetCookie(w, &http.Cookie{Name: "argus_cli_redirect", MaxAge: -1, Path: "/"})
 		h.createSessionCodeAndRedirect(w, r, userID, c.Value)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusFound)
+
+	// Web flow — redirect the browser to the UI with a one-time code.
+	uiURL := h.cfg.UIURL
+	if uiURL == "" {
+		uiURL = "http://localhost:3000"
+	}
+	h.createSessionCodeAndRedirect(w, r, userID, uiURL+"/auth/callback")
 }
 
 // createSessionCodeAndRedirect stores a short-lived code in oauth_sessions and

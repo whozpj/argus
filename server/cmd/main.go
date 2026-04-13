@@ -33,6 +33,7 @@ func main() {
 
 	oauthCfg := auth.OAuthConfig{
 		BaseURL:            getenv("ARGUS_BASE_URL", "http://localhost:4000"),
+		UIURL:              getenv("ARGUS_UI_URL", "http://localhost:3000"),
 		GitHubClientID:     getenv("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: getenv("GITHUB_CLIENT_SECRET", ""),
 		GoogleClientID:     getenv("GOOGLE_CLIENT_ID", ""),
