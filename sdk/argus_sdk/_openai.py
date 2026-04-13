@@ -4,7 +4,7 @@ import time
 from ._reporter import report
 
 
-def patch(client: object, endpoint: str) -> None:
+def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
     """Wrap client.chat.completions.create to capture signals after each response."""
     completions = client.chat.completions  # type: ignore[attr-defined]
     original_create = completions.create
@@ -24,7 +24,7 @@ def patch(client: object, endpoint: str) -> None:
             "latency_ms": latency_ms,
             "finish_reason": finish_reason,
             "timestamp_utc": _now(),
-        })
+        }, api_key=api_key)
         return response
 
     completions.create = _create

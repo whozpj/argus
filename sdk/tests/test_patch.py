@@ -51,7 +51,7 @@ def test_anthropic_patch_captures_event():
     client = MagicMock()
     client.messages.create.return_value = _anthropic_response()
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         anthropic_patch(client, "http://localhost:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -90,7 +90,7 @@ def test_anthropic_null_stop_reason_becomes_empty_string():
     client = MagicMock()
     client.messages.create.return_value = _anthropic_response(stop_reason=None)
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         anthropic_patch(client, "http://localhost:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -105,7 +105,7 @@ def test_anthropic_event_has_all_required_keys():
     client = MagicMock()
     client.messages.create.return_value = _anthropic_response()
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         anthropic_patch(client, "http://localhost:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -119,7 +119,7 @@ def test_anthropic_timestamp_format():
     client = MagicMock()
     client.messages.create.return_value = _anthropic_response()
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         anthropic_patch(client, "http://localhost:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -139,7 +139,7 @@ def test_anthropic_latency_is_measured():
 
     client.messages.create.side_effect = slow_create
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         anthropic_patch(client, "http://localhost:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -156,7 +156,7 @@ def test_openai_patch_captures_event():
     client = MagicMock()
     client.chat.completions.create.return_value = _openai_response()
 
-    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         openai_patch(client, "http://localhost:4000")
         client.chat.completions.create(model="gpt-4o", messages=[])
 
@@ -200,7 +200,7 @@ def test_openai_no_choices_gives_empty_finish_reason():
     resp.usage.completion_tokens = 5
     client.chat.completions.create.return_value = resp
 
-    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         openai_patch(client, "http://localhost:4000")
         client.chat.completions.create(model="gpt-4o", messages=[])
 
@@ -218,7 +218,7 @@ def test_openai_null_usage_gives_zero_tokens():
     resp.choices = [MagicMock(finish_reason="stop")]
     client.chat.completions.create.return_value = resp
 
-    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         openai_patch(client, "http://localhost:4000")
         client.chat.completions.create(model="gpt-4o", messages=[])
 
@@ -233,7 +233,7 @@ def test_openai_event_has_all_required_keys():
     client = MagicMock()
     client.chat.completions.create.return_value = _openai_response()
 
-    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         openai_patch(client, "http://localhost:4000")
         client.chat.completions.create(model="gpt-4o", messages=[])
 
@@ -262,7 +262,7 @@ def test_patch_with_explicit_anthropic_client():
     client.messages = MagicMock()
     client.messages.create.return_value = _anthropic_response()
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         patch(endpoint="http://localhost:4000", client=client)
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
@@ -282,7 +282,7 @@ def test_patch_with_explicit_openai_client():
     client.chat = MagicMock()
     client.chat.completions.create.return_value = _openai_response()
 
-    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         patch(endpoint="http://localhost:4000", client=client)
         client.chat.completions.create(model="gpt-4o", messages=[])
 
@@ -297,13 +297,13 @@ def test_class_level_patched_only_once():
             self.messages = MagicMock()
             self.messages.create.return_value = _anthropic_response()
 
-    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic")
-    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic")  # second call
+    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None)
+    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None)  # second call
 
     assert FakeClient._argus_patched is True
 
     posted = []
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted.append(ev)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         with mock_patch("argus_sdk._anthropic.patch") as mock_ap:
             FakeClient()
             assert mock_ap.call_count == 1  # wrapped once, not twice
@@ -316,7 +316,7 @@ def test_endpoint_passed_to_reporter():
     client = MagicMock()
     client.messages.create.return_value = _anthropic_response()
 
-    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev: posted_endpoints.append(ep)):
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted_endpoints.append(ep)):
         anthropic_patch(client, "http://my-argus-server:4000")
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
