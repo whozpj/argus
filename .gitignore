@@ -16,6 +16,7 @@ htmlcov/
 
 # ── Go ────────────────────────────────────────────────
 server/bin/
+server/main
 *.exe
 *.test
 
