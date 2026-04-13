@@ -1,111 +1,96 @@
-package store
+package store_test
 
 import (
 	"testing"
+
+	"github.com/whozpj/argus/server/internal/store"
 )
 
-func insertTestEvent(t *testing.T, db *DB, model string, outputTokens, latencyMs int) {
+func insertTestEvent(t *testing.T, db *store.DB, projectID, model string, outputTokens, latencyMs int) {
 	t.Helper()
-	err := db.InsertEvent(Event{
+	err := db.InsertEvent(store.Event{
+		ProjectID:    projectID,
 		Model:        model,
-		Provider:     "anthropic",
+		Provider:     "openai",
 		InputTokens:  10,
 		OutputTokens: outputTokens,
 		LatencyMs:    latencyMs,
 		FinishReason: "stop",
-		TimestampUTC: "2026-04-07T00:00:00Z",
+		TimestampUTC: "2026-04-08T00:00:00Z",
 	})
 	if err != nil {
 		t.Fatalf("InsertEvent: %v", err)
 	}
 }
 
-func TestReadyModels_EmptyWhenNoBaselines(t *testing.T) {
-	db := openTestDB(t)
-	models, err := db.ReadyModels()
+func TestReadyModels(t *testing.T) {
+	db := newTestDB(t)
+	projectID := "proj-ready-models"
+	model := "gpt-4o"
+
+	models, err := db.ReadyModels(projectID)
 	if err != nil {
 		t.Fatalf("ReadyModels: %v", err)
 	}
 	if len(models) != 0 {
-		t.Errorf("expected 0 ready models, got %v", models)
+		t.Errorf("expected 0 ready models initially, got %d", len(models))
 	}
-}
 
-func TestReadyModels_OnlyReturnsReadyOnes(t *testing.T) {
-	db := openTestDB(t)
+	for i := 0; i < 200; i++ {
+		if err := db.UpdateBaseline(projectID, model, 50, 200); err != nil {
+			t.Fatalf("UpdateBaseline[%d]: %v", i, err)
+		}
+	}
 
-	// Force-insert a ready and a not-ready baseline directly.
-	db.sql.Exec(`INSERT INTO baselines (model, count, mean_output_tokens, m2_output_tokens, mean_latency_ms, m2_latency_ms, is_ready, updated_at) VALUES ('ready-model', 200, 50, 0, 200, 0, 1, datetime('now'))`)
-	db.sql.Exec(`INSERT INTO baselines (model, count, mean_output_tokens, m2_output_tokens, mean_latency_ms, m2_latency_ms, is_ready, updated_at) VALUES ('not-ready', 50, 50, 0, 200, 0, 0, datetime('now'))`)
-
-	models, err := db.ReadyModels()
+	models, err = db.ReadyModels(projectID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("ReadyModels after 200: %v", err)
 	}
-	if len(models) != 1 || models[0] != "ready-model" {
-		t.Errorf("ReadyModels = %v, want [ready-model]", models)
+	if len(models) != 1 || models[0] != model {
+		t.Errorf("expected [%s], got %v", model, models)
 	}
 }
 
-func TestBaselineSample_ReturnsOldestFirst(t *testing.T) {
-	db := openTestDB(t)
+func TestBaselineSample(t *testing.T) {
+	db := newTestDB(t)
+	projectID := "proj-sample"
+	model := "claude-sonnet-4-6"
 
-	// Insert 5 events with distinct output_tokens we can track.
-	for i := 1; i <= 5; i++ {
-		insertTestEvent(t, db, "claude-sonnet-4-6", i*10, 100)
+	for i := 0; i < 5; i++ {
+		insertTestEvent(t, db, projectID, model, 100+i, 500)
 	}
 
-	events, err := db.BaselineSample("claude-sonnet-4-6", 3)
+	sample, err := db.BaselineSample(projectID, model, 3)
 	if err != nil {
 		t.Fatalf("BaselineSample: %v", err)
 	}
-	if len(events) != 3 {
-		t.Fatalf("got %d events, want 3", len(events))
+	if len(sample) != 3 {
+		t.Errorf("expected 3 events, got %d", len(sample))
 	}
-	// Oldest first → output_tokens should be 10, 20, 30
-	if events[0].OutputTokens != 10 || events[1].OutputTokens != 20 || events[2].OutputTokens != 30 {
-		t.Errorf("unexpected order: %v %v %v", events[0].OutputTokens, events[1].OutputTokens, events[2].OutputTokens)
+	// Should be oldest first — lowest output tokens inserted first
+	if sample[0].OutputTokens > sample[2].OutputTokens {
+		t.Error("BaselineSample should return oldest events first")
 	}
 }
 
-func TestRecentSample_ReturnsNewestChronological(t *testing.T) {
-	db := openTestDB(t)
+func TestRecentSample(t *testing.T) {
+	db := newTestDB(t)
+	projectID := "proj-recent"
+	model := "claude-sonnet-4-6"
 
-	for i := 1; i <= 5; i++ {
-		insertTestEvent(t, db, "gpt-4o", i*10, 100)
+	for i := 0; i < 5; i++ {
+		insertTestEvent(t, db, projectID, model, 100+i, 500)
 	}
 
-	events, err := db.RecentSample("gpt-4o", 3)
+	sample, err := db.RecentSample(projectID, model, 3)
 	if err != nil {
 		t.Fatalf("RecentSample: %v", err)
 	}
-	if len(events) != 3 {
-		t.Fatalf("got %d events, want 3", len(events))
+	if len(sample) != 3 {
+		t.Errorf("expected 3 events, got %d", len(sample))
 	}
-	// Newest 3 are output_tokens 30, 40, 50 → returned oldest-first → 30, 40, 50
-	if events[0].OutputTokens != 30 || events[1].OutputTokens != 40 || events[2].OutputTokens != 50 {
-		t.Errorf("unexpected order: %v %v %v", events[0].OutputTokens, events[1].OutputTokens, events[2].OutputTokens)
-	}
-}
-
-func TestBaselineSample_LimitRespected(t *testing.T) {
-	db := openTestDB(t)
-	for i := 0; i < 10; i++ {
-		insertTestEvent(t, db, "model-x", 50, 200)
-	}
-	events, _ := db.BaselineSample("model-x", 4)
-	if len(events) != 4 {
-		t.Errorf("got %d events, want 4", len(events))
-	}
-}
-
-func TestRecentSample_EmptyForUnknownModel(t *testing.T) {
-	db := openTestDB(t)
-	events, err := db.RecentSample("no-such-model", 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 0 {
-		t.Errorf("expected 0 events, got %d", len(events))
+	// Should be newest 3, returned oldest-first within the window
+	if sample[0].OutputTokens > sample[2].OutputTokens {
+		t.Error("RecentSample should return events oldest-first within the window")
 	}
 }

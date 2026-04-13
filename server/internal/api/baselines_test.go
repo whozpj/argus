@@ -9,18 +9,8 @@ import (
 	"github.com/whozpj/argus/server/internal/store"
 )
 
-func openTestDB(t *testing.T) *store.DB {
-	t.Helper()
-	db, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	return db
-}
-
 func TestBaselinesHandler_EmptyDB(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	h := NewBaselinesHandler(db)
 
 	rr := httptest.NewRecorder()
@@ -42,13 +32,14 @@ func TestBaselinesHandler_EmptyDB(t *testing.T) {
 }
 
 func TestBaselinesHandler_ReturnsJSON(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	db.InsertEvent(store.Event{ //nolint:errcheck
+		ProjectID: "self-hosted",
 		Model: "gpt-4o", Provider: "openai", InputTokens: 10,
 		OutputTokens: 50, LatencyMs: 200,
 		FinishReason: "stop", TimestampUTC: "2026-04-07T00:00:00Z",
 	})
-	db.UpdateBaseline("gpt-4o", 50, 200) //nolint:errcheck
+	db.UpdateBaseline("self-hosted", "gpt-4o", 50, 200) //nolint:errcheck
 
 	h := NewBaselinesHandler(db)
 	rr := httptest.NewRecorder()
@@ -73,7 +64,7 @@ func TestBaselinesHandler_ReturnsJSON(t *testing.T) {
 }
 
 func TestBaselinesHandler_CORSHeader(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	h := NewBaselinesHandler(db)
 	rr := httptest.NewRecorder()
 	h(rr, httptest.NewRequest(http.MethodGet, "/api/v1/baselines", nil))
@@ -84,9 +75,9 @@ func TestBaselinesHandler_CORSHeader(t *testing.T) {
 }
 
 func TestBaselinesHandler_IsReadyField(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	for i := 0; i < 200; i++ {
-		db.UpdateBaseline("claude-sonnet-4-6", 50, 200) //nolint:errcheck
+		db.UpdateBaseline("self-hosted", "claude-sonnet-4-6", 50, 200) //nolint:errcheck
 	}
 
 	h := NewBaselinesHandler(db)

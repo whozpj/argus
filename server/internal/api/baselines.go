@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/whozpj/argus/server/internal/auth"
 	"github.com/whozpj/argus/server/internal/store"
 )
 
@@ -29,21 +30,29 @@ type baselineJSON struct {
 }
 
 // NewBaselinesHandler returns a handler for GET /api/v1/baselines.
+// The handler reads projectID from context (set by ResolveProject middleware).
+// Falls back to "self-hosted" when no API key is provided, preserving backward
+// compatibility for unauthenticated self-hosted users.
 func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		baselines, err := db.ListBaselines()
+		projectID, ok := auth.ProjectIDFromContext(r.Context())
+		if !ok {
+			projectID = "self-hosted"
+		}
+
+		baselines, err := db.ListBaselines(projectID)
 		if err != nil {
 			slog.Error("api: list baselines", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		total, err := db.EventCount()
+		total, err := db.EventCount(projectID)
 		if err != nil {
 			slog.Error("api: event count", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		driftStates, err := db.GetDriftStates()
+		driftStates, err := db.GetDriftStates(projectID)
 		if err != nil {
 			slog.Error("api: drift states", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)

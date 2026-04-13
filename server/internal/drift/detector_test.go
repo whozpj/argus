@@ -32,22 +32,13 @@ func (s *spyNotifier) Clear(model string) error {
 var _ alerts.Notifier = noopNotifier{}
 var _ alerts.Notifier = &spyNotifier{}
 
-func openTestDB(t *testing.T) *store.DB {
-	t.Helper()
-	db, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	return db
-}
-
 // seedEvents inserts n events and updates the baseline for each, so that
 // after 200 calls the baseline is_ready flag flips automatically.
 func seedEvents(t *testing.T, db *store.DB, model string, n, outputTokens, latencyMs int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		if err := db.InsertEvent(store.Event{
+			ProjectID:    "self-hosted",
 			Model:        model,
 			Provider:     "anthropic",
 			InputTokens:  50,
@@ -58,7 +49,7 @@ func seedEvents(t *testing.T, db *store.DB, model string, n, outputTokens, laten
 		}); err != nil {
 			t.Fatalf("InsertEvent: %v", err)
 		}
-		if err := db.UpdateBaseline(model, outputTokens, latencyMs); err != nil {
+		if err := db.UpdateBaseline("self-hosted", model, outputTokens, latencyMs); err != nil {
 			t.Fatalf("UpdateBaseline: %v", err)
 		}
 	}
@@ -69,7 +60,7 @@ func seedEvents(t *testing.T, db *store.DB, model string, n, outputTokens, laten
 // ---------------------------------------------------------------------------
 
 func TestRunOnce_SkipsModelsWithTooFewRecentEvents(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-a", 200, 50, 200) // builds baseline to is_ready=1
 	seedEvents(t, db, "model-a", 5, 50, 200)   // only 5 recent — below minRecentN
 
@@ -82,7 +73,7 @@ func TestRunOnce_SkipsModelsWithTooFewRecentEvents(t *testing.T) {
 }
 
 func TestRunOnce_NoDriftForIdenticalDistributions(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	// 200 events build the baseline (is_ready=1); 50 more are the "recent" window.
 	seedEvents(t, db, "gpt-4o", 250, 50, 200)
 
@@ -98,7 +89,7 @@ func TestRunOnce_NoDriftForIdenticalDistributions(t *testing.T) {
 }
 
 func TestRunOnce_DriftDetectedForShiftedDistribution(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	// 200 events build the baseline; 50 more with 10× output_tokens are the "recent" window.
 	seedEvents(t, db, "claude-sonnet-4-6", 200, 50, 200)
 	seedEvents(t, db, "claude-sonnet-4-6", 50, 500, 200)
@@ -115,7 +106,7 @@ func TestRunOnce_DriftDetectedForShiftedDistribution(t *testing.T) {
 }
 
 func TestRunOnce_ScoreInRange(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-x", 250, 50, 200)
 
 	d := New(db, time.Hour, noopNotifier{})
@@ -131,7 +122,7 @@ func TestRunOnce_ScoreInRange(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHysteresis_AlertFiresOnce(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-h", 200, 50, 200)
 	seedEvents(t, db, "model-h", 50, 500, 200) // drifted
 
@@ -149,7 +140,7 @@ func TestHysteresis_AlertFiresOnce(t *testing.T) {
 }
 
 func TestHysteresis_AlertClearsAfterThreeGoodWindows(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	model := "model-clear"
 	seedEvents(t, db, model, 200, 50, 200)
 	seedEvents(t, db, model, 50, 500, 200) // trigger drift
@@ -174,7 +165,7 @@ func TestHysteresis_AlertClearsAfterThreeGoodWindows(t *testing.T) {
 }
 
 func TestHysteresis_ClearCountResetsIfDriftReturns(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	model := "model-flap"
 	seedEvents(t, db, model, 200, 50, 200)
 	seedEvents(t, db, model, 50, 500, 200) // trigger
@@ -225,7 +216,7 @@ func TestFloats_Empty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNotifier_FireCalledOnAlert(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-n", 200, 50, 200)
 	seedEvents(t, db, "model-n", 50, 500, 200) // drifted
 
@@ -239,7 +230,7 @@ func TestNotifier_FireCalledOnAlert(t *testing.T) {
 }
 
 func TestNotifier_FireNotCalledWhenNoDrift(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-ok", 250, 50, 200) // identical baseline + recent
 
 	spy := &spyNotifier{}
@@ -252,7 +243,7 @@ func TestNotifier_FireNotCalledWhenNoDrift(t *testing.T) {
 }
 
 func TestNotifier_ClearCalledAfterResolution(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	model := "model-resolve"
 	seedEvents(t, db, model, 200, 50, 200)
 	seedEvents(t, db, model, 50, 500, 200) // trigger
@@ -272,7 +263,7 @@ func TestNotifier_ClearCalledAfterResolution(t *testing.T) {
 }
 
 func TestNotifier_FireCalledOnceNotRepeatedly(t *testing.T) {
-	db := openTestDB(t)
+	db := newTestDB(t)
 	seedEvents(t, db, "model-once", 200, 50, 200)
 	seedEvents(t, db, "model-once", 50, 500, 200)
 
