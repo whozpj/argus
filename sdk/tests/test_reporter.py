@@ -51,6 +51,7 @@ def test_reporter_posts_to_correct_url():
     mock_client_instance.post.assert_called_once_with(
         "http://localhost:4000/api/v1/events",
         json=_SAMPLE_EVENT,
+        headers={},
     )
 
 
@@ -120,7 +121,7 @@ def test_report_does_not_block():
     call_started = threading.Event()
     call_done = threading.Event()
 
-    def slow_post(endpoint, event):
+    def slow_post(endpoint, event, api_key=None):
         call_started.set()
         time.sleep(0.1)
         call_done.set()
@@ -138,7 +139,7 @@ def test_report_uses_single_persistent_worker():
     """`report()` reuses the same worker thread across multiple calls."""
     posted = []
 
-    def capture_post(endpoint, event):
+    def capture_post(endpoint, event, api_key=None):
         posted.append(event)
 
     with mock_patch("argus_sdk._reporter._post_with_retry", side_effect=capture_post):
@@ -158,7 +159,7 @@ def test_flush_waits_for_all_events():
     """`flush()` must block until all queued events have been sent."""
     posted = []
 
-    def slow_post(endpoint, event):
+    def slow_post(endpoint, event, api_key=None):
         time.sleep(0.02)
         posted.append(event)
 

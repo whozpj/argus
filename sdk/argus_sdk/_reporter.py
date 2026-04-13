@@ -7,15 +7,15 @@ import time
 logger = logging.getLogger("argus_sdk")
 
 _SENTINEL = object()
-_SHUTDOWN_TIMEOUT = 5.0  # seconds to wait for flush on exit
-_RETRY_DELAYS = [0.5, 1.0, 2.0]  # backoff between retries
+_SHUTDOWN_TIMEOUT = 5.0
+_RETRY_DELAYS = [0.5, 1.0, 2.0]
 
 _q: queue.Queue = queue.Queue()
 _worker_thread: threading.Thread | None = None
 _lock = threading.Lock()
 
 
-def _post_with_retry(endpoint: str, event: dict) -> None:
+def _post_with_retry(endpoint: str, event: dict, api_key: str | None = None) -> None:
     try:
         import httpx
     except ImportError:
@@ -23,6 +23,10 @@ def _post_with_retry(endpoint: str, event: dict) -> None:
         return
 
     url = f"{endpoint}/api/v1/events"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     last_exc: Exception | None = None
 
     for attempt, delay in enumerate([0] + _RETRY_DELAYS):
@@ -30,9 +34,8 @@ def _post_with_retry(endpoint: str, event: dict) -> None:
             time.sleep(delay)
         try:
             with httpx.Client(timeout=3.0) as client:
-                resp = client.post(url, json=event)
+                resp = client.post(url, json=event, headers=headers)
             if resp.status_code < 500:
-                # 2xx = success; 4xx = our fault, retrying won't help
                 if resp.status_code >= 400:
                     logger.debug("argus: server rejected event (status %s)", resp.status_code)
                 return
@@ -51,9 +54,9 @@ def _worker(endpoint: str) -> None:
         if item is _SENTINEL:
             _q.task_done()
             break
-        event = item
+        event, api_key = item
         try:
-            _post_with_retry(endpoint, event)
+            _post_with_retry(endpoint, event, api_key)
         finally:
             _q.task_done()
 
@@ -77,15 +80,11 @@ def _ensure_worker(endpoint: str) -> None:
         atexit.register(_flush)
 
 
-def report(endpoint: str, event: dict) -> None:
+def report(endpoint: str, event: dict, api_key: str | None = None) -> None:
     _ensure_worker(endpoint)
-    _q.put(event)
+    _q.put((event, api_key))
 
 
 def flush(timeout: float = _SHUTDOWN_TIMEOUT) -> None:
-    """Block until all queued events have been sent (or timeout expires).
-
-    Useful in short scripts and CLI tools where you want to ensure events
-    are delivered before the process exits.
-    """
+    """Block until all queued events have been sent (or timeout expires)."""
     _q.join()
