@@ -1,45 +1,35 @@
 package store_test
 
 import (
-	"context"
+	"os"
 	"testing"
 
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/whozpj/argus/server/internal/store"
 )
 
-// newTestDB spins up a throwaway Postgres container and returns an open *store.DB.
-// The container is terminated when the test finishes.
+// newTestDB returns a *store.DB for tests.
+//
+// Strategy (in order):
+//  1. If POSTGRES_TEST_URL is set, connect directly — no Docker needed.
+//  2. Otherwise, try to spin up a testcontainer. If Docker is unavailable,
+//     skip the test with a clear message rather than failing it.
 func newTestDB(t *testing.T) *store.DB {
 	t.Helper()
-	ctx := context.Background()
 
-	pgc, err := postgres.Run(ctx,
-		"postgres:15-alpine",
-		postgres.WithDatabase("argus_test"),
-		postgres.WithUsername("argus"),
-		postgres.WithPassword("argus"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
-		),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	t.Cleanup(func() { _ = pgc.Terminate(ctx) })
-
-	dsn, err := pgc.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("get connection string: %v", err)
+	if dsn := os.Getenv("POSTGRES_TEST_URL"); dsn != "" {
+		db, err := store.Open(dsn)
+		if err != nil {
+			t.Fatalf("open test DB (%s): %v", dsn, err)
+		}
+		if err := db.Truncate(); err != nil { t.Fatalf("truncate: %v", err) }
+		t.Cleanup(func() { _ = db.Close() })
+		return db
 	}
 
-	db, err := store.Open(dsn)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
+	// Attempt testcontainers; skip if Docker unavailable.
+	db, skip := tryTestcontainers(t)
+	if skip {
+		t.Skip("no POSTGRES_TEST_URL set and Docker unavailable — skipping integration test")
 	}
-	t.Cleanup(func() { _ = db.Close() })
-
 	return db
 }

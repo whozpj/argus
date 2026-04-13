@@ -1,8 +1,7 @@
-package drift
+package store_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -11,27 +10,12 @@ import (
 	"github.com/whozpj/argus/server/internal/store"
 )
 
-func newTestDB(t *testing.T) *store.DB {
-	t.Helper()
-	if dsn := os.Getenv("POSTGRES_TEST_URL"); dsn != "" {
-		db, err := store.Open(dsn)
-		if err != nil {
-			t.Fatalf("open test DB: %v", err)
-		}
-		if err := db.Truncate(); err != nil { t.Fatalf("truncate: %v", err) }
-		t.Cleanup(func() { _ = db.Close() })
-		return db
-	}
-	db, skip := tryTestcontainers(t)
-	if skip {
-		t.Skip("no POSTGRES_TEST_URL and Docker unavailable")
-	}
-	return db
-}
-
+// tryTestcontainers attempts to spin up a throwaway Postgres container.
+// Returns (db, false) on success, (nil, true) if Docker is unavailable.
 func tryTestcontainers(t *testing.T) (*store.DB, bool) {
 	t.Helper()
 	ctx := context.Background()
+
 	pgc, err := postgres.Run(ctx,
 		"postgres:15-alpine",
 		postgres.WithDatabase("argus_test"),
@@ -42,9 +26,11 @@ func tryTestcontainers(t *testing.T) (*store.DB, bool) {
 		),
 	)
 	if err != nil {
+		// Docker unavailable — signal skip.
 		return nil, true
 	}
 	t.Cleanup(func() { _ = pgc.Terminate(ctx) })
+
 	dsn, err := pgc.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("get container DSN: %v", err)

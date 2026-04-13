@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -10,12 +11,27 @@ import (
 	"github.com/whozpj/argus/server/internal/store"
 )
 
-// newTestDB spins up a throwaway Postgres container and returns an open *store.DB.
-// The container is terminated when the test finishes.
 func newTestDB(t *testing.T) *store.DB {
 	t.Helper()
-	ctx := context.Background()
+	if dsn := os.Getenv("POSTGRES_TEST_URL"); dsn != "" {
+		db, err := store.Open(dsn)
+		if err != nil {
+			t.Fatalf("open test DB: %v", err)
+		}
+		if err := db.Truncate(); err != nil { t.Fatalf("truncate: %v", err) }
+		t.Cleanup(func() { _ = db.Close() })
+		return db
+	}
+	db, skip := tryTestcontainers(t)
+	if skip {
+		t.Skip("no POSTGRES_TEST_URL and Docker unavailable")
+	}
+	return db
+}
 
+func tryTestcontainers(t *testing.T) (*store.DB, bool) {
+	t.Helper()
+	ctx := context.Background()
 	pgc, err := postgres.Run(ctx,
 		"postgres:15-alpine",
 		postgres.WithDatabase("argus_test"),
@@ -26,20 +42,17 @@ func newTestDB(t *testing.T) *store.DB {
 		),
 	)
 	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
+		return nil, true
 	}
 	t.Cleanup(func() { _ = pgc.Terminate(ctx) })
-
 	dsn, err := pgc.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		t.Fatalf("get connection string: %v", err)
+		t.Fatalf("get container DSN: %v", err)
 	}
-
 	db, err := store.Open(dsn)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-
-	return db
+	return db, false
 }

@@ -14,8 +14,10 @@ sdk-lint:
 server-build:
 	cd server && go build -o bin/argus ./cmd/...
 
+POSTGRES_TEST_URL ?= postgres://argus:argus@localhost:5432/argus_test?sslmode=disable
+
 server-test:
-	cd server && go test ./...
+	cd server && POSTGRES_TEST_URL="$(POSTGRES_TEST_URL)" go test -p 1 ./...
 
 # ── UI ────────────────────────────────────────────────
 ui-install:

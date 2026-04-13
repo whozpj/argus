@@ -35,6 +35,15 @@ func (d *DB) Close() error {
 	return d.sql.Close()
 }
 
+// Truncate wipes all application tables. Intended for test setup only.
+func (d *DB) Truncate() error {
+	_, err := d.sql.Exec(`
+		TRUNCATE events, baselines, drift_state, projects, api_keys, oauth_sessions, users
+		RESTART IDENTITY CASCADE
+	`)
+	return err
+}
+
 // Event is one captured LLM request/response signal.
 type Event struct {
 	ProjectID    string
