@@ -164,6 +164,20 @@ func (d *DB) CreateOAuthSession(code, userID string, expiresAt time.Time) error 
 	return nil
 }
 
+// OwnsProject returns true when userID is the owner of projectID.
+// Used by the dashboard to validate project selection from JWT-authenticated requests.
+func (d *DB) OwnsProject(userID, projectID string) (bool, error) {
+	var count int
+	err := d.sql.QueryRow(
+		`SELECT COUNT(*) FROM projects WHERE id = $1 AND user_id = $2`,
+		projectID, userID,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("owns project: %w", err)
+	}
+	return count > 0, nil
+}
+
 // ConsumeOAuthSession exchanges a code for a userID and deletes the session.
 // Returns ("", false, nil) if code not found or expired.
 func (d *DB) ConsumeOAuthSession(code string) (userID string, ok bool, err error) {
