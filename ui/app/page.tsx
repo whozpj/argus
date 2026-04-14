@@ -132,7 +132,10 @@ function DashboardInner() {
                   className="h-8 text-sm w-44"
                   data-testid="project-selector"
                 >
-                  <SelectValue placeholder="Select project" />
+                  {/* Render the name directly — Base UI SelectValue shows the raw value (ID) */}
+                  <span className="flex-1 text-left truncate">
+                    {me.projects.find((p) => p.id === selectedProject)?.name ?? "Select project"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {me.projects.map((p: Project) => (
