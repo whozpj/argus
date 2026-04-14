@@ -164,3 +164,101 @@ func TestGenerateAPIKey_Format(t *testing.T) {
 		t.Error("HashAPIKey(rawKey) != hash from GenerateAPIKey")
 	}
 }
+
+func TestCORSMiddleware_SetsHeaders(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := auth.CORSMiddleware(next)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Methods"); got == "" {
+		t.Error("Access-Control-Allow-Methods should be set")
+	}
+}
+
+func TestCORSMiddleware_PreflightReturns204(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := auth.CORSMiddleware(next)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodOptions, "/", nil))
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("OPTIONS status = %d, want 204", rr.Code)
+	}
+}
+
+func TestResolveProject_JWTWithProjectID_ValidOwner(t *testing.T) {
+	t.Setenv("JWT_SECRET", "mw-test-secret")
+	db := newTestDB(t)
+	userID, _ := db.UpsertUser("owner@example.com", "gh-99", "")
+	proj, _ := db.CreateProject(userID, "owned-project")
+	tok, _ := auth.IssueToken(userID)
+
+	var gotProjectID string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotProjectID, _ = auth.ProjectIDFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	h := auth.ResolveProject(db)(next)
+	req := httptest.NewRequest(http.MethodGet, "/?project_id="+proj.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	if gotProjectID != proj.ID {
+		t.Errorf("projectID = %q, want %q", gotProjectID, proj.ID)
+	}
+}
+
+func TestResolveProject_JWTWithProjectID_NotOwner(t *testing.T) {
+	t.Setenv("JWT_SECRET", "mw-test-secret")
+	db := newTestDB(t)
+	ownerID, _ := db.UpsertUser("owner@example.com", "gh-100", "")
+	proj, _ := db.CreateProject(ownerID, "owners-project")
+
+	attackerID, _ := db.UpsertUser("attacker@example.com", "gh-101", "")
+	tok, _ := auth.IssueToken(attackerID)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := auth.ResolveProject(db)(next)
+	req := httptest.NewRequest(http.MethodGet, "/?project_id="+proj.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", rr.Code)
+	}
+}
+
+func TestResolveProject_JWTWithProjectID_InvalidJWT(t *testing.T) {
+	t.Setenv("JWT_SECRET", "mw-test-secret")
+	db := newTestDB(t)
+	ownerID, _ := db.UpsertUser("owner@example.com", "gh-102", "")
+	proj, _ := db.CreateProject(ownerID, "some-project")
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := auth.ResolveProject(db)(next)
+	req := httptest.NewRequest(http.MethodGet, "/?project_id="+proj.ID, nil)
+	req.Header.Set("Authorization", "Bearer not.a.valid.token")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rr.Code)
+	}
+}
