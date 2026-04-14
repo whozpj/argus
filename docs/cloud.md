@@ -11,7 +11,7 @@ This document covers the `cloud` branch, which migrates Argus from SQLite to Pos
 | Database | SQLite (single file) | PostgreSQL |
 | DB connection | `ARGUS_DB_PATH` env var | `POSTGRES_URL` env var |
 | Data isolation | Single global namespace | Per-project via `project_id` |
-| Auth | None | JWT + GitHub/Google OAuth + API key middleware (Plan 2 complete) |
+| Auth | None | JWT + GitHub/Google OAuth + API key middleware |
 
 ---
 
@@ -47,6 +47,7 @@ The schema is applied automatically on startup. No migrations to run manually.
 | `ARGUS_SLACK_WEBHOOK` | _(empty)_ | Slack webhook URL for drift alerts |
 | `JWT_SECRET` | `dev-secret-change-in-production` | HS256 signing key — **change in production** |
 | `ARGUS_BASE_URL` | `http://localhost:4000` | Public base URL used to construct OAuth redirect URIs |
+| `ARGUS_UI_URL` | `http://localhost:3000` | Dashboard URL — browser is redirected here after web OAuth |
 | `GITHUB_CLIENT_ID` | _(empty)_ | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | _(empty)_ | GitHub OAuth app client secret |
 | `GOOGLE_CLIENT_ID` | _(empty)_ | Google OAuth app client ID |
@@ -100,11 +101,11 @@ ok   github.com/whozpj/argus/server/internal/store
 **Plan 2 — Auth & API Keys** ✅ Done
 JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key generation + validation, /api/v1/me, /api/v1/projects, /api/v1/projects/:id/keys, /api/v1/auth/token (CLI code exchange).
 
-**Plan 3 — SDK + CLI**
-`api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands.
+**Plan 3 — SDK + CLI** ✅ Done
+`api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands. 59 SDK tests passing.
 
-**Plan 4 — Dashboard**
-Login page, project selector, per-project dashboard URL.
+**Plan 4 — Dashboard** ✅ Done
+Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware. All server packages passing.
 
 **Plan 5 — AWS Infrastructure**
 Terraform for ECS Fargate, RDS, ALB, S3, CloudFront, Secrets Manager. GitHub Actions CI/CD.
