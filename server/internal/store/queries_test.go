@@ -23,6 +23,54 @@ func insertTestEvent(t *testing.T, db *store.DB, projectID, model string, output
 	}
 }
 
+func TestOwnsProject_Owner(t *testing.T) {
+	db := newTestDB(t)
+	userID, err := db.UpsertUser("owns@example.com", "gh-1", "")
+	if err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	proj, err := db.CreateProject(userID, "my-project")
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	owns, err := db.OwnsProject(userID, proj.ID)
+	if err != nil {
+		t.Fatalf("OwnsProject: %v", err)
+	}
+	if !owns {
+		t.Error("expected owner to own their project")
+	}
+}
+
+func TestOwnsProject_NonOwner(t *testing.T) {
+	db := newTestDB(t)
+	ownerID, _ := db.UpsertUser("owner@example.com", "gh-2", "")
+	attackerID, _ := db.UpsertUser("attacker@example.com", "gh-3", "")
+	proj, err := db.CreateProject(ownerID, "owners-project")
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	owns, err := db.OwnsProject(attackerID, proj.ID)
+	if err != nil {
+		t.Fatalf("OwnsProject: %v", err)
+	}
+	if owns {
+		t.Error("non-owner should not own someone else's project")
+	}
+}
+
+func TestOwnsProject_NonExistentProject(t *testing.T) {
+	db := newTestDB(t)
+	userID, _ := db.UpsertUser("user@example.com", "gh-4", "")
+	owns, err := db.OwnsProject(userID, "does-not-exist")
+	if err != nil {
+		t.Fatalf("OwnsProject: %v", err)
+	}
+	if owns {
+		t.Error("should not own a non-existent project")
+	}
+}
+
 func TestReadyModels(t *testing.T) {
 	db := newTestDB(t)
 	projectID := "proj-ready-models"
