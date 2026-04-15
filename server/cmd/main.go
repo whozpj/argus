@@ -33,6 +33,7 @@ func main() {
 
 	oauthCfg := auth.OAuthConfig{
 		BaseURL:            getenv("ARGUS_BASE_URL", "http://localhost:4000"),
+		UIURL:              getenv("ARGUS_UI_URL", "http://localhost:3000"),
 		GitHubClientID:     getenv("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: getenv("GITHUB_CLIENT_SECRET", ""),
 		GoogleClientID:     getenv("GOOGLE_CLIENT_ID", ""),
@@ -58,7 +59,8 @@ func main() {
 	})
 
 	slog.Info("argus server starting", "addr", addr, "dsn", dsn)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	// Wrap mux with CORS so the dashboard on port 3000 can call the API on port 4000.
+	if err := http.ListenAndServe(addr, auth.CORSMiddleware(mux)); err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
 	}

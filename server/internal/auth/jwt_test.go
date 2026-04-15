@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/whozpj/argus/server/internal/auth"
@@ -32,15 +33,17 @@ func TestJWT_InvalidToken(t *testing.T) {
 func TestJWT_TamperedToken(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-1234")
 	tok, _ := auth.IssueToken("user-456")
-	// Flip the last character to produce an invalid signature.
-	last := tok[len(tok)-1]
-	var replacement byte
-	if last == 'X' {
-		replacement = 'Y'
+	// Target the first character of the signature section — it always carries
+	// all 6 bits of data (no base64 padding bits), so swapping it always
+	// produces a different HMAC and a guaranteed validation failure.
+	parts := strings.SplitN(tok, ".", 3)
+	sig := []byte(parts[2])
+	if sig[0] == 'A' {
+		sig[0] = 'B'
 	} else {
-		replacement = 'X'
+		sig[0] = 'A'
 	}
-	tampered := tok[:len(tok)-1] + string(replacement)
+	tampered := parts[0] + "." + parts[1] + "." + string(sig)
 	_, err := auth.ValidateToken(tampered)
 	if err == nil {
 		t.Fatal("expected error for tampered token")

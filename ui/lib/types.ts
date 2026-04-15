@@ -1,3 +1,16 @@
+export interface Project {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface MeResponse {
+  id: string;
+  email: string;
+  display_name: string | null;
+  projects: Project[];
+}
+
 export interface BaselineModel {
   model: string;
   count: number;

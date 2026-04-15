@@ -8,11 +8,12 @@ import (
 
 // User represents an authenticated Argus user.
 type User struct {
-	ID        string
-	Email     string
-	GithubID  string
-	GoogleID  string
-	CreatedAt time.Time
+	ID          string
+	Email       string
+	GithubID    string
+	GoogleID    string
+	DisplayName string // empty string means unset
+	CreatedAt   time.Time
 }
 
 // Project is an isolation boundary — events and baselines are scoped per project.
@@ -53,11 +54,12 @@ func (d *DB) UpsertUser(email, githubID, googleID string) (string, error) {
 // GetUserByID returns a user by their ID.
 func (d *DB) GetUserByID(id string) (User, error) {
 	var u User
-	var githubID, googleID sql.NullString
+	var githubID, googleID, displayName sql.NullString
 	err := d.sql.QueryRow(`
-		SELECT id, email, COALESCE(github_id,''), COALESCE(google_id,''), created_at
+		SELECT id, email, COALESCE(github_id,''), COALESCE(google_id,''),
+		       COALESCE(display_name,''), created_at
 		FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.Email, &githubID, &googleID, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &githubID, &googleID, &displayName, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return User{}, fmt.Errorf("user not found")
 	}
@@ -66,7 +68,23 @@ func (d *DB) GetUserByID(id string) (User, error) {
 	}
 	u.GithubID = githubID.String
 	u.GoogleID = googleID.String
+	u.DisplayName = displayName.String
 	return u, nil
+}
+
+// UpdateDisplayName sets the display name for a user.
+// An empty string clears the display name.
+func (d *DB) UpdateDisplayName(userID, displayName string) error {
+	var val any
+	if displayName != "" {
+		val = displayName
+	}
+	_, err := d.sql.Exec(
+		`UPDATE users SET display_name = $1 WHERE id = $2`, val, userID)
+	if err != nil {
+		return fmt.Errorf("update display name: %w", err)
+	}
+	return nil
 }
 
 // CreateProject creates a new project for a user and returns it.
@@ -162,6 +180,20 @@ func (d *DB) CreateOAuthSession(code, userID string, expiresAt time.Time) error 
 		return fmt.Errorf("create oauth session: %w", err)
 	}
 	return nil
+}
+
+// OwnsProject returns true when userID is the owner of projectID.
+// Used by the dashboard to validate project selection from JWT-authenticated requests.
+func (d *DB) OwnsProject(userID, projectID string) (bool, error) {
+	var count int
+	err := d.sql.QueryRow(
+		`SELECT COUNT(*) FROM projects WHERE id = $1 AND user_id = $2`,
+		projectID, userID,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("owns project: %w", err)
+	}
+	return count > 0, nil
 }
 
 // ConsumeOAuthSession exchanges a code for a userID and deletes the session.

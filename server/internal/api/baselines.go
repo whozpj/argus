@@ -83,7 +83,6 @@ func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	}
 }

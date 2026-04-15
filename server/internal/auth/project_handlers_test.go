@@ -191,6 +191,99 @@ func TestProjectHandlers_CreateAPIKey(t *testing.T) {
 	}
 }
 
+func TestUpdateMe_SetsDisplayName(t *testing.T) {
+	t.Setenv("JWT_SECRET", "proj-test-secret")
+	db := newTestDB(t)
+	userID, _ := db.UpsertUser("dn@example.com", "gh-dn", "")
+
+	mux := http.NewServeMux()
+	auth.RegisterProjectRoutes(mux, db)
+
+	body := `{"display_name":"Alice"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", strings.NewReader(body))
+	req.Header.Set("Authorization", jwtHeader(t, userID))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["display_name"] != "Alice" {
+		t.Errorf("display_name = %v, want Alice", resp["display_name"])
+	}
+
+	// Verify GET /api/v1/me also returns the new display_name.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req2.Header.Set("Authorization", jwtHeader(t, userID))
+	rr2 := httptest.NewRecorder()
+	mux.ServeHTTP(rr2, req2)
+	var resp2 map[string]any
+	json.NewDecoder(rr2.Body).Decode(&resp2) //nolint:errcheck
+	if resp2["display_name"] != "Alice" {
+		t.Errorf("GET display_name = %v, want Alice", resp2["display_name"])
+	}
+}
+
+func TestUpdateMe_TooLong(t *testing.T) {
+	t.Setenv("JWT_SECRET", "proj-test-secret")
+	db := newTestDB(t)
+	userID, _ := db.UpsertUser("long@example.com", "gh-long", "")
+
+	mux := http.NewServeMux()
+	auth.RegisterProjectRoutes(mux, db)
+
+	long := strings.Repeat("x", 51)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me",
+		strings.NewReader(`{"display_name":"`+long+`"}`))
+	req.Header.Set("Authorization", jwtHeader(t, userID))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestUpdateMe_Unauthenticated(t *testing.T) {
+	db := newTestDB(t)
+	mux := http.NewServeMux()
+	auth.RegisterProjectRoutes(mux, db)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me",
+		strings.NewReader(`{"display_name":"Alice"}`))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rr.Code)
+	}
+}
+
+func TestUpdateMe_DisplayNameNullWhenUnset(t *testing.T) {
+	t.Setenv("JWT_SECRET", "proj-test-secret")
+	db := newTestDB(t)
+	userID, _ := db.UpsertUser("null@example.com", "gh-null", "")
+
+	mux := http.NewServeMux()
+	auth.RegisterProjectRoutes(mux, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req.Header.Set("Authorization", jwtHeader(t, userID))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	var resp map[string]any
+	json.NewDecoder(rr.Body).Decode(&resp) //nolint:errcheck
+	if dn, exists := resp["display_name"]; exists && dn != nil {
+		t.Errorf("display_name = %v, want null for new user", dn)
+	}
+}
+
 func TestProjectHandlers_CreateAPIKey_WrongProject(t *testing.T) {
 	t.Setenv("JWT_SECRET", "proj-test-secret")
 	db := newTestDB(t)

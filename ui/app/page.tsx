@@ -1,4 +1,26 @@
-import { fetchBaselines } from "@/lib/api";
+"use client";
+
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle,
+  Database,
+  LogOut,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
+
+import { fetchMe, fetchBaselines, logout } from "@/lib/api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { BaselinesResponse, MeResponse, Project } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,102 +31,269 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Activity, AlertTriangle, CheckCircle, Database, RefreshCw } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { BaselineModel } from "@/lib/types";
-import { RefreshButton } from "@/components/refresh-button";
+import { Settings } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+// ─── Main dashboard ────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
-  let data;
-  let fetchError: string | null = null;
+function DashboardInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const selectedProject = params.get("project") ?? "";
 
-  try {
-    data = await fetchBaselines();
-  } catch (e) {
-    fetchError = e instanceof Error ? e.message : "Failed to connect to Argus server";
-  }
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [data, setData] = useState<BaselinesResponse | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Auth check — redirect to /login if no valid token.
+  useEffect(() => {
+    fetchMe()
+      .then((m) => {
+        setMe(m);
+        // Auto-select first project if none in URL.
+        if (!params.get("project") && m.projects.length > 0) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("project", m.projects[0].id);
+          router.replace(url.pathname + url.search);
+        }
+      })
+      .catch(() => {
+        router.replace("/login");
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch baselines whenever the selected project changes.
+  const loadBaselines = useCallback(
+    (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setFetchError(null);
+
+      fetchBaselines(selectedProject || undefined)
+        .then((d) => {
+          setData(d);
+        })
+        .catch((e: Error) => setFetchError(e.message))
+        .finally(() => {
+          setLoading(false);
+          setRefreshing(false);
+        });
+    },
+    [selectedProject],
+  );
+
+  useEffect(() => {
+    if (me) loadBaselines();
+  }, [me, loadBaselines]);
+
+  const handleProjectChange = (id: string | null) => {
+    if (!id) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("project", id);
+    router.push(url.pathname + url.search);
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.replace("/login");
+  };
 
   const alertedModels = data?.baselines.filter((b) => b.drift_alerted) ?? [];
-  const checkedModels = data?.baselines.filter((b) => b.drift_score > 0 || b.drift_alerted) ?? [];
+  const checkedModels =
+    data?.baselines.filter((b) => b.drift_score > 0 || b.drift_alerted) ?? [];
+  const currentProject = me?.projects.find((p) => p.id === selectedProject);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Activity className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold tracking-tight">Argus</h1>
-            <span className="text-sm text-muted-foreground">LLM Drift Monitor</span>
+    <div className="min-h-screen bg-background" data-testid="dashboard">
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+          {/* Brand */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary text-primary-foreground">
+              <Activity className="h-4 w-4" />
+            </div>
+            <span className="font-semibold tracking-tight text-sm">Argus</span>
+            <span className="hidden sm:block text-muted-foreground text-sm">
+              / LLM Drift Monitor
+            </span>
           </div>
-          <RefreshButton />
+
+          {/* Right controls */}
+          <div className="flex items-center gap-2">
+            {/* Project selector */}
+            {me && me.projects.length > 0 && (
+              <Select
+                value={selectedProject}
+                onValueChange={handleProjectChange}
+              >
+                <SelectTrigger
+                  className="h-8 text-sm w-44"
+                  data-testid="project-selector"
+                >
+                  {/* Render the name directly — Base UI SelectValue shows the raw value (ID) */}
+                  <span className="flex-1 text-left truncate">
+                    {me.projects.find((p) => p.id === selectedProject)?.name ?? "Select project"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {me.projects.map((p: Project) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Refresh */}
+            <button
+              onClick={() => loadBaselines(true)}
+              disabled={refreshing}
+              aria-label="Refresh"
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+              />
+            </button>
+
+            {/* User dropdown */}
+            {me && (
+              <div className="pl-2 border-l">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    data-testid="user-email"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors max-w-40 truncate hidden md:block"
+                    title={me.email}
+                  >
+                    {me.display_name ?? me.email}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      onClick={() => router.push("/settings")}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-testid="sign-out"
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 cursor-pointer text-muted-foreground"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
+      {/* ── Main content ────────────────────────────────────────────────────── */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        {fetchError ? (
-          <ErrorBanner message={fetchError} />
+        {loading ? (
+          <LoadingSkeleton />
+        ) : fetchError ? (
+          <ErrorBanner message={fetchError} onRetry={() => loadBaselines()} />
         ) : data ? (
           <>
-            {/* Active alerts — shown prominently at the top */}
+            {/* Project heading */}
+            {currentProject && (
+              <div>
+                <h2 className="text-base font-semibold">{currentProject.name}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Project ID:{" "}
+                  <code className="font-mono">{currentProject.id}</code>
+                </p>
+              </div>
+            )}
+
+            {/* Drift alert banner */}
             {alertedModels.length > 0 && (
-              <div className="rounded-lg border border-yellow-400/60 bg-yellow-50 dark:bg-yellow-950/20 p-4 space-y-2">
-                <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-semibold">
-                  <AlertTriangle className="h-5 w-5" />
-                  Drift detected on {alertedModels.length} model{alertedModels.length > 1 ? "s" : ""}
+              <div
+                className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-950/20 p-4"
+                data-testid="drift-alert"
+              >
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-sm mb-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Drift detected on {alertedModels.length} model
+                  {alertedModels.length > 1 ? "s" : ""}
                 </div>
                 <ul className="space-y-1">
                   {alertedModels.map((b) => (
-                    <li key={b.model} className="text-sm text-yellow-800 dark:text-yellow-300 font-mono">
-                      {b.model} — score {b.drift_score.toFixed(2)}
-                      {" · "}p(tokens) {b.p_output_tokens.toFixed(4)}
-                      {" · "}p(latency) {b.p_latency_ms.toFixed(4)}
+                    <li
+                      key={b.model}
+                      className="text-xs text-amber-800 dark:text-amber-300 font-mono pl-6"
+                    >
+                      {b.model}
+                      <span className="text-amber-600">
+                        {" "}· score {b.drift_score.toFixed(2)}
+                      </span>
+                      <span className="text-amber-500">
+                        {" "}· p(tok) {b.p_output_tokens.toFixed(4)} · p(lat){" "}
+                        {b.p_latency_ms.toFixed(4)}
+                      </span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {/* All clear */}
+            {/* All-clear banner */}
             {checkedModels.length > 0 && alertedModels.length === 0 && (
-              <div className="rounded-lg border border-green-400/60 bg-green-50 dark:bg-green-950/20 p-3 flex items-center gap-2 text-green-700 dark:text-green-400 text-sm">
-                <CheckCircle className="h-4 w-4" />
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-950/20 px-4 py-3 flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-sm">
+                <CheckCircle className="h-4 w-4 shrink-0" />
                 All models within baseline — no drift detected
               </div>
             )}
 
             {/* Summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <SummaryCard
-                title="Total Events"
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard
+                label="Total Events"
                 value={data.total_events.toLocaleString()}
-                icon={<Database className="h-4 w-4 text-muted-foreground" />}
+                icon={<Database className="h-4 w-4" />}
               />
-              <SummaryCard
-                title="Models Tracked"
+              <StatCard
+                label="Models"
                 value={data.baselines.length}
-                icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+                icon={<Zap className="h-4 w-4" />}
               />
-              <SummaryCard
-                title="Baselines Ready"
+              <StatCard
+                label="Baselines Ready"
                 value={data.baselines.filter((b) => b.is_ready).length}
-                icon={<RefreshCw className="h-4 w-4 text-muted-foreground" />}
+                icon={<CheckCircle className="h-4 w-4" />}
               />
-              <SummaryCard
-                title="Alerts Active"
+              <StatCard
+                label="Alerts"
                 value={alertedModels.length}
-                icon={<AlertTriangle className={`h-4 w-4 ${alertedModels.length > 0 ? "text-yellow-500" : "text-muted-foreground"}`} />}
+                icon={<AlertTriangle className="h-4 w-4" />}
+                highlight={alertedModels.length > 0}
               />
             </div>
 
-            {/* Baselines + drift table */}
+            {/* Models table */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Models</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Models</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 {data.baselines.length === 0 ? (
-                  <EmptyState />
+                  <EmptyState projectName={currentProject?.name} />
                 ) : (
                   <BaselineTable baselines={data.baselines} />
                 )}
@@ -117,95 +306,180 @@ export default async function DashboardPage() {
   );
 }
 
-function SummaryCard({ title, value, icon }: { title: string; value: number | string; icon: React.ReactNode }) {
+export default function DashboardPage() {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        {icon}
+    <Suspense>
+      <DashboardInner />
+    </Suspense>
+  );
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  icon,
+  highlight = false,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <Card
+      className={highlight ? "border-amber-300 dark:border-amber-700/50" : ""}
+    >
+      <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
+        <CardTitle className="text-xs font-medium text-muted-foreground">
+          {label}
+        </CardTitle>
+        <span
+          className={
+            highlight ? "text-amber-500" : "text-muted-foreground"
+          }
+        >
+          {icon}
+        </span>
       </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
+      <CardContent className="px-4 pb-4">
+        <p
+          className={`text-2xl font-bold tabular-nums ${
+            highlight ? "text-amber-600 dark:text-amber-400" : ""
+          }`}
+        >
+          {value}
+        </p>
       </CardContent>
     </Card>
   );
 }
 
-function DriftScoreBar({ score }: { score: number }) {
+function DriftBar({ score }: { score: number }) {
   const pct = Math.round(score * 100);
   const color =
-    score >= 0.7 ? "bg-yellow-500" :
-    score >= 0.4 ? "bg-orange-400" :
-    "bg-green-500";
+    score >= 0.7
+      ? "bg-amber-500"
+      : score >= 0.4
+        ? "bg-orange-400"
+        : "bg-emerald-500";
   return (
     <div className="flex items-center gap-2">
-      <div className="w-20 h-2 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <span className="text-xs tabular-nums">{score.toFixed(2)}</span>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {score.toFixed(2)}
+      </span>
     </div>
   );
 }
 
+function StatusBadge({ b }: { b: BaselineModel }) {
+  if (b.drift_alerted)
+    return (
+      <Badge className="bg-amber-500 text-white hover:bg-amber-500 text-xs">
+        Drift
+      </Badge>
+    );
+  if (b.is_ready && b.drift_score > 0)
+    return (
+      <Badge
+        variant="outline"
+        className="text-emerald-600 border-emerald-400 text-xs"
+      >
+        OK
+      </Badge>
+    );
+  if (b.is_ready)
+    return (
+      <Badge variant="outline" className="text-xs">
+        Monitoring
+      </Badge>
+    );
+  return (
+    <Badge variant="secondary" className="text-xs">
+      {b.count}/200
+    </Badge>
+  );
+}
+
 function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
-  const hasAnyDriftData = baselines.some((b) => b.drift_score > 0 || b.drift_alerted);
+  const hasDrift = baselines.some((b) => b.drift_score > 0 || b.drift_alerted);
 
   return (
     <Table>
       <TableHeader>
-        <TableRow>
-          <TableHead>Model</TableHead>
+        <TableRow className="text-xs">
+          <TableHead className="pl-6">Model</TableHead>
           <TableHead className="text-right">Events</TableHead>
-          <TableHead className="text-right">Mean Tokens</TableHead>
-          <TableHead className="text-right">Mean Latency</TableHead>
-          <TableHead className="text-center">Baseline</TableHead>
-          {hasAnyDriftData && <TableHead className="text-center">Drift Score</TableHead>}
-          <TableHead className="text-center">Status</TableHead>
+          <TableHead className="text-right hidden sm:table-cell">
+            Avg Tokens
+          </TableHead>
+          <TableHead className="text-right hidden sm:table-cell">
+            Avg Latency
+          </TableHead>
+          <TableHead className="text-center hidden md:table-cell">
+            Baseline
+          </TableHead>
+          {hasDrift && <TableHead className="text-center">Drift</TableHead>}
+          <TableHead className="text-center pr-6">Status</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {baselines.map((b) => (
-          <TableRow key={b.model} className={b.drift_alerted ? "bg-yellow-50/50 dark:bg-yellow-950/10" : ""}>
-            <TableCell className="font-mono text-sm">{b.model}</TableCell>
-            <TableCell className="text-right">{b.count.toLocaleString()}</TableCell>
-            <TableCell className="text-right">
-              {b.mean_output_tokens}
-              <span className="text-muted-foreground text-xs"> ±{b.stddev_output_tokens}</span>
+          <TableRow
+            key={b.model}
+            className={
+              b.drift_alerted
+                ? "bg-amber-50/40 dark:bg-amber-950/10"
+                : ""
+            }
+          >
+            <TableCell className="pl-6 font-mono text-xs">{b.model}</TableCell>
+            <TableCell className="text-right text-sm tabular-nums">
+              {b.count.toLocaleString()}
             </TableCell>
-            <TableCell className="text-right">
-              {b.mean_latency_ms} ms
-              <span className="text-muted-foreground text-xs"> ±{b.stddev_latency_ms}</span>
+            <TableCell className="text-right hidden sm:table-cell">
+              <span className="text-sm tabular-nums">
+                {b.mean_output_tokens}
+              </span>
+              <span className="text-xs text-muted-foreground ml-1">
+                ±{b.stddev_output_tokens}
+              </span>
             </TableCell>
-            <TableCell className="text-center">
+            <TableCell className="text-right hidden sm:table-cell">
+              <span className="text-sm tabular-nums">{b.mean_latency_ms}</span>
+              <span className="text-xs text-muted-foreground ml-1">
+                ms ±{b.stddev_latency_ms}
+              </span>
+            </TableCell>
+            <TableCell className="text-center hidden md:table-cell">
               {b.is_ready ? (
-                <Badge variant="default">Ready</Badge>
+                <Badge variant="default" className="text-xs">
+                  Ready
+                </Badge>
               ) : (
-                <Badge variant="secondary">{b.count}/200</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {b.count}/200
+                </Badge>
               )}
             </TableCell>
-            {hasAnyDriftData && (
+            {hasDrift && (
               <TableCell className="text-center">
                 {b.drift_score > 0 || b.drift_alerted ? (
-                  <DriftScoreBar score={b.drift_score} />
+                  <DriftBar score={b.drift_score} />
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
               </TableCell>
             )}
-            <TableCell className="text-center">
-              {b.drift_alerted ? (
-                <Badge variant="destructive" className="bg-yellow-500 hover:bg-yellow-500 text-white">
-                  ⚠ Drift
-                </Badge>
-              ) : b.is_ready && (b.drift_score > 0) ? (
-                <Badge variant="outline" className="text-green-600 border-green-400">
-                  OK
-                </Badge>
-              ) : b.is_ready ? (
-                <Badge variant="outline">Monitoring</Badge>
-              ) : (
-                <Badge variant="secondary">Warming up</Badge>
-              )}
+            <TableCell className="text-center pr-6">
+              <StatusBadge b={b} />
             </TableCell>
           </TableRow>
         ))}
@@ -214,29 +488,70 @@ function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ projectName }: { projectName?: string }) {
   return (
-    <div className="py-16 text-center text-muted-foreground space-y-2">
-      <p className="text-sm">No events received yet.</p>
-      <p className="text-xs">
-        Run{" "}
-        <code className="font-mono bg-muted px-1 py-0.5 rounded text-xs">
-          python examples/demo-app/simulate.py
-        </code>{" "}
-        to populate with test data.
-      </p>
+    <div className="py-16 text-center space-y-3">
+      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted">
+        <Database className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <div>
+        <p className="text-sm font-medium">No events yet</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Instrument your app with the Argus SDK and point it to{" "}
+          {projectName ? (
+            <strong>{projectName}</strong>
+          ) : (
+            "this project"
+          )}
+          .
+        </p>
+      </div>
+      <div className="inline-block">
+        <code className="text-xs bg-muted rounded px-2 py-1 font-mono">
+          patch(endpoint, api_key=&quot;argus_sk_…&quot;)
+        </code>
+      </div>
     </div>
   );
 }
 
-function ErrorBanner({ message }: { message: string }) {
+function ErrorBanner({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
-    <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-      <strong>Could not reach Argus server:</strong> {message}
-      <p className="mt-1 text-xs text-muted-foreground">
-        Make sure the server is running:{" "}
-        <code className="font-mono">cd server && go run ./cmd/main.go</code>
-      </p>
+    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 flex items-start gap-3">
+      <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-destructive">
+          Failed to load data
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+          {message}
+        </p>
+      </div>
+      <button
+        onClick={onRetry}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-24 rounded-xl border bg-muted/40" />
+        ))}
+      </div>
+      <div className="h-64 rounded-xl border bg-muted/40" />
     </div>
   );
 }

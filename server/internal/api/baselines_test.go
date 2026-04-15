@@ -63,17 +63,6 @@ func TestBaselinesHandler_ReturnsJSON(t *testing.T) {
 	}
 }
 
-func TestBaselinesHandler_CORSHeader(t *testing.T) {
-	db := newTestDB(t)
-	h := NewBaselinesHandler(db)
-	rr := httptest.NewRecorder()
-	h(rr, httptest.NewRequest(http.MethodGet, "/api/v1/baselines", nil))
-
-	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("missing CORS header")
-	}
-}
-
 func TestBaselinesHandler_IsReadyField(t *testing.T) {
 	db := newTestDB(t)
 	for i := 0; i < 200; i++ {

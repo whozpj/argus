@@ -67,17 +67,41 @@ func jwtFromRequest(r *http.Request) string {
 	return ""
 }
 
-// ResolveProject is middleware that resolves the projectID from an API key.
-// If "Authorization: Bearer argus_sk_<key>" is present, it validates the key and
-// injects the projectID into context. If absent, it injects "self-hosted" for
-// backward compatibility with unauthenticated self-hosted users.
-// Returns 401 only when an API key is presented but invalid.
+// CORSMiddleware adds permissive CORS headers so the dashboard on port 3000 can
+// call the API on port 4000 in development. Both origins are collapsed to one
+// domain behind a reverse proxy in production.
+func CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ResolveProject is middleware that resolves the projectID for ingest and baselines.
+//
+// Resolution order:
+//  1. API key (argus_sk_*) — used by the SDK; resolves to the key's project.
+//  2. JWT + ?project_id query param — used by the dashboard; validates ownership.
+//  3. No credentials — falls back to "self-hosted" for unauthenticated instances.
+//
+// Returns 401 only when credentials are presented but invalid/expired.
+// Returns 403 when a JWT user requests a project they don't own.
 func ResolveProject(db *store.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			projectID := "self-hosted"
-			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer argus_sk_") {
-				rawKey := strings.TrimPrefix(h, "Bearer ")
+			authHeader := r.Header.Get("Authorization")
+
+			switch {
+			// Path 1: SDK API key.
+			case strings.HasPrefix(authHeader, "Bearer argus_sk_"):
+				rawKey := strings.TrimPrefix(authHeader, "Bearer ")
 				hash := HashAPIKey(rawKey)
 				pid, ok, err := db.ResolveAPIKey(hash)
 				if err != nil {
@@ -89,7 +113,28 @@ func ResolveProject(db *store.DB) func(http.Handler) http.Handler {
 					return
 				}
 				projectID = pid
+
+			// Path 2: Dashboard JWT + explicit project_id query param.
+			case strings.HasPrefix(authHeader, "Bearer ") && r.URL.Query().Get("project_id") != "":
+				tok := strings.TrimPrefix(authHeader, "Bearer ")
+				userID, err := ValidateToken(tok)
+				if err != nil {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				pid := r.URL.Query().Get("project_id")
+				owns, err := db.OwnsProject(userID, pid)
+				if err != nil {
+					http.Error(w, "internal error", http.StatusInternalServerError)
+					return
+				}
+				if !owns {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+				projectID = pid
 			}
+
 			ctx := context.WithValue(r.Context(), contextKeyProjectID, projectID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
