@@ -26,6 +26,27 @@ export async function fetchMe(): Promise<MeResponse> {
   return res.json();
 }
 
+export async function updateDisplayName(displayName: string): Promise<MeResponse> {
+  const token = getToken();
+  if (!token) throw new Error("not authenticated");
+
+  const res = await fetch(`${SERVER}/api/v1/me`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text.trim() || `PATCH /api/v1/me: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchBaselines(projectID?: string): Promise<BaselinesResponse> {
   const token = getToken();
   const headers: Record<string, string> = {};

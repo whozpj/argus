@@ -13,6 +13,13 @@ import {
 } from "lucide-react";
 
 import { fetchMe, fetchBaselines, logout } from "@/lib/api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { BaselinesResponse, MeResponse, Project } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { BaselineModel } from "@/lib/types";
+import { Settings } from "lucide-react";
 
 // ─── Main dashboard ────────────────────────────────────────────────────────────
 
@@ -159,24 +167,36 @@ function DashboardInner() {
               />
             </button>
 
-            {/* User + sign out */}
+            {/* User dropdown */}
             {me && (
-              <div className="flex items-center gap-2 pl-2 border-l">
-                <span
-                  className="text-xs text-muted-foreground hidden md:block max-w-40 truncate"
-                  title={me.email}
-                  data-testid="user-email"
-                >
-                  {me.email}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  aria-label="Sign out"
-                  data-testid="sign-out"
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
+              <div className="pl-2 border-l">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    data-testid="user-email"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors max-w-40 truncate hidden md:block"
+                    title={me.email}
+                  >
+                    {me.display_name ?? me.email}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      onClick={() => router.push("/settings")}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-testid="sign-out"
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 cursor-pointer text-muted-foreground"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
           </div>

@@ -140,8 +140,10 @@ test.describe("Dashboard — authenticated, no data", () => {
     await expect(selector).toContainText("production", { timeout: 6000 });
   });
 
-  test("shows sign-out button", async ({ page }) => {
-    await expect(page.getByTestId("sign-out")).toBeVisible();
+  test("shows sign-out option in user dropdown", async ({ page }) => {
+    // Sign out is now inside the dropdown — open it first.
+    await page.getByTestId("user-email").click();
+    await expect(page.getByTestId("sign-out")).toBeVisible({ timeout: 3000 });
   });
 
   test("shows empty state when no events", async ({ page }) => {
@@ -236,6 +238,8 @@ test.describe("Dashboard — sign out", () => {
     await page.goto("/");
     await waitForDashboard(page);
 
+    // Open the user dropdown first, then click sign out.
+    await page.getByTestId("user-email").click();
     await page.getByTestId("sign-out").click();
     await page.waitForURL("/login", { timeout: 5000 });
 
