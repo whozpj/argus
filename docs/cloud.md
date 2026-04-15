@@ -65,9 +65,9 @@ Three existing tables now have a `project_id` column:
 - `baselines (project_id, model, count, mean_output_tokens, m2_output_tokens, mean_latency_ms, m2_latency_ms, is_ready, updated_at)` — composite PK on `(project_id, model)`
 - `drift_state (project_id, model, score, p_output_tokens, p_latency_ms, alerted, checked_at)` — composite PK on `(project_id, model)`
 
-Four new tables for the upcoming auth system:
+Four new tables for auth:
 
-- `users (id, email, github_id, google_id, created_at)`
+- `users (id, email, display_name, github_id, google_id, created_at)`
 - `projects (id, user_id, name, created_at)`
 - `api_keys (id, project_id, key_hash, key_prefix, name, created_at)`
 - `oauth_sessions (code, user_id, expires_at)` — short-lived codes for CLI login
@@ -105,7 +105,7 @@ JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key gene
 `api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands. 59 SDK tests passing.
 
 **Plan 4 — Dashboard** ✅ Done
-Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware. All server packages passing.
+Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware, user settings page (`/settings`) with display name editing (`PATCH /api/v1/me`). Playwright e2e tests for login, callback, dashboard, and settings. All server packages passing.
 
 **Plan 5 — AWS Infrastructure**
 Terraform for ECS Fargate, RDS, ALB, S3, CloudFront, Secrets Manager. GitHub Actions CI/CD.
