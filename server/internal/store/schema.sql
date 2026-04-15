@@ -1,10 +1,13 @@
 CREATE TABLE IF NOT EXISTS users (
-    id         TEXT PRIMARY KEY,
-    email      TEXT UNIQUE NOT NULL,
-    github_id  TEXT UNIQUE,
-    google_id  TEXT UNIQUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id           TEXT PRIMARY KEY,
+    email        TEXT UNIQUE NOT NULL,
+    github_id    TEXT UNIQUE,
+    google_id    TEXT UNIQUE,
+    display_name TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Idempotent migration for existing deployments.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 
 CREATE TABLE IF NOT EXISTS projects (
     id         TEXT PRIMARY KEY,

@@ -17,6 +17,7 @@ type projectHandlers struct {
 func RegisterProjectRoutes(mux *http.ServeMux, db *store.DB) {
 	h := &projectHandlers{db: db}
 	mux.Handle("GET /api/v1/me", RequireJWT(http.HandlerFunc(h.me)))
+	mux.Handle("PATCH /api/v1/me", RequireJWT(http.HandlerFunc(h.updateMe)))
 	mux.Handle("POST /api/v1/projects", RequireJWT(http.HandlerFunc(h.createProject)))
 	mux.Handle("GET /api/v1/projects", RequireJWT(http.HandlerFunc(h.listProjects)))
 	mux.Handle("POST /api/v1/projects/{id}/keys", RequireJWT(http.HandlerFunc(h.createKey)))
@@ -44,15 +45,90 @@ func (h *projectHandlers) me(w http.ResponseWriter, r *http.Request) {
 		CreatedAt string `json:"created_at"`
 	}
 	type meResponse struct {
-		ID       string        `json:"id"`
-		Email    string        `json:"email"`
-		Projects []projectJSON `json:"projects"`
+		ID          string        `json:"id"`
+		Email       string        `json:"email"`
+		DisplayName *string       `json:"display_name"`
+		Projects    []projectJSON `json:"projects"`
 	}
 
+	var displayName *string
+	if user.DisplayName != "" {
+		displayName = &user.DisplayName
+	}
 	resp := meResponse{
-		ID:       user.ID,
-		Email:    user.Email,
-		Projects: make([]projectJSON, 0, len(projects)),
+		ID:          user.ID,
+		Email:       user.Email,
+		DisplayName: displayName,
+		Projects:    make([]projectJSON, 0, len(projects)),
+	}
+	for _, p := range projects {
+		resp.Projects = append(resp.Projects, projectJSON{
+			ID:        p.ID,
+			Name:      p.Name,
+			CreatedAt: p.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+}
+
+func (h *projectHandlers) updateMe(w http.ResponseWriter, r *http.Request) {
+	userID, _ := UserIDFromContext(r.Context())
+
+	var req struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.DisplayName) > 50 {
+		http.Error(w, "display_name must be 50 characters or fewer", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.UpdateDisplayName(userID, req.DisplayName); err != nil {
+		slog.Error("update display name", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the updated user (same shape as GET /api/v1/me).
+	user, err := h.db.GetUserByID(userID)
+	if err != nil {
+		slog.Error("get user after update", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	projects, err := h.db.ListProjects(userID)
+	if err != nil {
+		slog.Error("list projects after update", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	type projectJSON struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		CreatedAt string `json:"created_at"`
+	}
+	type meResponse struct {
+		ID          string        `json:"id"`
+		Email       string        `json:"email"`
+		DisplayName *string       `json:"display_name"`
+		Projects    []projectJSON `json:"projects"`
+	}
+
+	var displayName *string
+	if user.DisplayName != "" {
+		displayName = &user.DisplayName
+	}
+	resp := meResponse{
+		ID:          user.ID,
+		Email:       user.Email,
+		DisplayName: displayName,
+		Projects:    make([]projectJSON, 0, len(projects)),
 	}
 	for _, p := range projects {
 		resp.Projects = append(resp.Projects, projectJSON{
