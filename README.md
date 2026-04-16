@@ -77,13 +77,13 @@ flowchart LR
         OPENAI["OpenAI / compatible"]
     end
 
-    subgraph ARGUS["Argus Container  :4000"]
+    subgraph ARGUS["Argus Container  :4000 / :3000"]
         INGEST["Ingest API\n/api/v1/events"]
         BASELINE["Baseline Builder\nWelford algorithm"]
         DETECTOR["Drift Detector\nMann-Whitney U\nBonferroni correction"]
         ALERTS["Alert Dispatcher\nSlack webhook"]
-        DB[("SQLite")]
-        UI["Dashboard\nlocalhost:4000"]
+        DB[("PostgreSQL")]
+        UI["Dashboard\nlocalhost:3000"]
     end
 
     EXTERNAL["Slack"]
@@ -276,21 +276,24 @@ After publishing, users install with:
 pip install argus-sdk
 ```
 
-## Next Steps — Argus Cloud
+## Argus Cloud
 
-The next major version moves Argus from self-hosted to a managed cloud platform hosted on AWS. The goal is to remove all infrastructure burden from the developer — no Docker, no SQLite, no server to maintain.
+Argus also runs as a managed cloud platform at [argus-sdk.com](https://argus-sdk.com). Sign up, create a project, get an API key, and point the SDK at the cloud endpoint — no Docker, no server to maintain.
 
-**User accounts and projects**
-Developers sign up and create projects, each with its own ingest key. All events, baselines, and drift history are stored per-project in the cloud. Teams can share a project dashboard without running anything locally.
+```python
+from argus_sdk import patch
+patch(endpoint="https://argus-sdk.com", api_key="argus_sk_...")
+```
 
-**CLI authentication**
-The `argus` CLI will support `argus login` to authenticate against the cloud platform and `argus status` to view live drift results from the terminal without opening a browser.
+**CLI**
 
-**Remote dashboard**
-Each project gets a hosted dashboard URL. Drift alerts, baseline charts, and event history are accessible from anywhere — no port forwarding, no VPN.
+```bash
+argus login      # authenticate via GitHub or Google OAuth
+argus status     # view drift summary for all your projects
+argus projects   # list projects and API key prefixes
+```
 
-**AWS infrastructure**
-The platform will run on AWS with an API Gateway and Lambda for ingest, RDS (PostgreSQL) for storage, and CloudFront in front of the dashboard. The SDK will point to the cloud endpoint by default, with self-hosted remaining supported for users who need it.
+Self-hosted mode remains fully supported — omit the `api_key` and point `endpoint` at your own container.
 
 ---
 
@@ -298,14 +301,15 @@ The platform will run on AWS with an API Gateway and Lambda for ingest, RDS (Pos
 
 ```
 sdk/          Python package — pip install argus-sdk
-server/       Go server — ingest, baselines, drift detection, Slack alerts
+server/       Go server — ingest, auth, baselines, drift detection, Slack alerts
   cmd/        main.go entrypoint
   internal/
     ingest/   POST /api/v1/events handler
-    store/    SQLite DAL (events, baselines, queries)
+    store/    PostgreSQL DAL (events, baselines, queries, users, projects, api_keys)
     drift/    Mann-Whitney U, Bonferroni, hysteresis detector
     alerts/   Slack webhook notifier
     api/      GET /api/v1/baselines handler
+    auth/     JWT, OAuth (GitHub + Google), API key middleware
 ui/           Next.js 14 dashboard (TypeScript, Tailwind, shadcn/ui)
 deploy/       Dockerfile + pm2 ecosystem config
 docs/         Documentation
