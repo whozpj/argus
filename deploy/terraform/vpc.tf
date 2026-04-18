@@ -22,7 +22,9 @@ resource "aws_subnet" "public" {
   tags = { Name = "argus-public-${count.index + 1}" }
 }
 
-# ── Private subnets (ECS + RDS) ───────────────────────────────────────────────
+# ── Private subnets (RDS only) ────────────────────────────────────────────────
+# ECS tasks run in public subnets (with assign_public_ip=true) to avoid the
+# ~$32/month NAT Gateway cost. RDS stays private — reachable via VPC routing.
 
 resource "aws_subnet" "private" {
   count             = 2
@@ -40,21 +42,9 @@ resource "aws_internet_gateway" "argus" {
   tags   = { Name = "argus" }
 }
 
-# ── NAT Gateway (single, in first public subnet) ─────────────────────────────
-
-resource "aws_eip" "nat" {
-  domain = "vpc"
-  tags   = { Name = "argus-nat" }
-}
-
-resource "aws_nat_gateway" "argus" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  tags          = { Name = "argus" }
-  depends_on    = [aws_internet_gateway.argus]
-}
-
 # ── Route tables ──────────────────────────────────────────────────────────────
+# No NAT Gateway — ECS tasks run in public subnets with direct internet access.
+# Private subnets (RDS) use the default VPC main route table (local only).
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.argus.id
@@ -69,21 +59,6 @@ resource "aws_route_table_association" "public" {
   count          = 2
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.argus.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.argus.id
-  }
-  tags = { Name = "argus-private" }
-}
-
-resource "aws_route_table_association" "private" {
-  count          = 2
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
 }
 
 # ── Security groups ───────────────────────────────────────────────────────────
