@@ -1,0 +1,10 @@
+# Terraform working directory
+.terraform/
+
+# State files (stored in S3, never commit locally)
+*.tfstate
+*.tfstate.backup
+
+# Variable files may contain secrets — use terraform.tfvars locally, never commit
+*.tfvars
+*.tfvars.json
