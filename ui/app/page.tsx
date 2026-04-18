@@ -36,7 +36,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import type { BaselineModel } from "@/lib/types";
 import { Settings } from "lucide-react";
