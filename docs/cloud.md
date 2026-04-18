@@ -1,17 +1,19 @@
 # Argus Cloud — Developer Guide
 
-This document covers the `cloud` branch, which migrates Argus from SQLite to PostgreSQL and lays the foundation for a multi-tenant hosted platform.
+This document covers the cloud version of Argus, which runs at [argus-sdk.com](https://argus-sdk.com). It uses PostgreSQL, multi-tenant auth, and deploys to AWS ECS Fargate via GitHub Actions.
 
 ---
 
-## What changed from `main`
+## What changed from the original self-hosted version
 
-| Area | `main` | `cloud` |
+| Area | Self-hosted v1 | Cloud (current) |
 |---|---|---|
 | Database | SQLite (single file) | PostgreSQL |
 | DB connection | `ARGUS_DB_PATH` env var | `POSTGRES_URL` env var |
 | Data isolation | Single global namespace | Per-project via `project_id` |
 | Auth | None | JWT + GitHub/Google OAuth + API key middleware |
+| Hosting | Local Docker container | AWS ECS Fargate at argus-sdk.com |
+| Deploy | Manual | GitHub Actions on push to `main` |
 
 ---
 
@@ -96,7 +98,7 @@ ok   github.com/whozpj/argus/server/internal/store
 
 ---
 
-## What's next (upcoming plans)
+## Completed plans
 
 **Plan 2 — Auth & API Keys** ✅ Done
 JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key generation + validation, /api/v1/me, /api/v1/projects, /api/v1/projects/:id/keys, /api/v1/auth/token (CLI code exchange).
@@ -105,13 +107,14 @@ JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key gene
 `api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands. 59 SDK tests passing.
 
 **Plan 4 — Dashboard** ✅ Done
-Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware, user settings page (`/settings`) with display name editing (`PATCH /api/v1/me`). Playwright e2e tests for login, callback, dashboard, and settings. All server packages passing.
+Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware, user settings page (`/settings`) with display name editing (`PATCH /api/v1/me`). Playwright e2e tests for login, callback, dashboard, and settings.
 
-**Plan 5 — AWS Infrastructure**
-Terraform for ECS Fargate, RDS, ALB, S3, CloudFront, Secrets Manager. GitHub Actions CI/CD.
+**Plan 5 — AWS Infrastructure** ✅ Done
+ECS Fargate + RDS PostgreSQL 15 + ALB + Route 53/ACM + Secrets Manager. GitHub Actions deploys on push to `main` via OIDC (no long-lived AWS keys). All infrastructure managed by Terraform in `deploy/terraform/`. Live at [argus-sdk.com](https://argus-sdk.com) once you run `terraform apply` and complete the one-time setup steps in `docs/superpowers/plans/2026-04-16-argus-cloud-plan-5-aws-infra.md` (Task 12).
 
 ---
 
-## Design spec
+## Design specs
 
-Full design decisions and architecture rationale: [docs/superpowers/specs/2026-04-08-argus-cloud-design.md](superpowers/specs/2026-04-08-argus-cloud-design.md)
+- Cloud architecture: [docs/superpowers/specs/2026-04-08-argus-cloud-design.md](superpowers/specs/2026-04-08-argus-cloud-design.md)
+- AWS infrastructure: [docs/superpowers/specs/2026-04-16-argus-cloud-plan-5-aws-infra.md](superpowers/specs/2026-04-16-argus-cloud-plan-5-aws-infra.md)

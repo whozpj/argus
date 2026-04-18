@@ -12,18 +12,29 @@ Works with Anthropic, OpenAI, and any OpenAI-compatible provider. Self-hosted, n
 
 ## Quick Start
 
-**1. Run the Argus container**
+**1. Start Postgres and the Argus container**
 
 ```bash
-docker run -p 4000:4000 -p 3000:3000 -v argus_data:/data argus/argus
+# Start Postgres
+docker run -d --name argus-db -p 5432:5432 \
+  -e POSTGRES_USER=argus \
+  -e POSTGRES_PASSWORD=argus \
+  -e POSTGRES_DB=argus \
+  postgres:15-alpine
+
+# Start Argus (macOS/Linux — uses host.docker.internal to reach the DB)
+docker run -p 4000:4000 -p 3000:3000 \
+  -e POSTGRES_URL="postgres://argus:argus@host.docker.internal:5432/argus?sslmode=disable" \
+  argus/argus
 ```
 
 Optional — enable Slack alerts:
 
 ```bash
 docker run -p 4000:4000 -p 3000:3000 \
+  -e POSTGRES_URL="postgres://argus:argus@host.docker.internal:5432/argus?sslmode=disable" \
   -e ARGUS_SLACK_WEBHOOK=https://hooks.slack.com/services/... \
-  -v argus_data:/data argus/argus
+  argus/argus
 ```
 
 **2. Install the SDK**
@@ -198,8 +209,9 @@ make sdk-test      # run pytest
 make server-build  # go build → server/bin/argus
 make ui-install    # npm install in ui/
 
-# Run locally (two terminals)
-cd server && go run ./cmd/main.go   # API on :4000
+# Run locally (requires Postgres — see docker run command above)
+cd server && POSTGRES_URL="postgres://argus:argus@localhost:5432/argus?sslmode=disable" \
+  go run ./cmd/main.go              # API on :4000
 cd ui && npm run dev                 # dashboard on :3000
 
 # Build the Docker image from repo root
@@ -210,11 +222,12 @@ docker build -f deploy/Dockerfile -t argus .
 
 The `examples/demo-app/` directory contains a simulator that sends synthetic events to Argus so you can see the dashboard and drift detection working without any LLM API keys.
 
-**You need three terminals:**
+**You need three terminals (plus a running Postgres instance):**
 
 ```bash
 # Terminal 1 — Go API server (port 4000)
-cd server && go run ./cmd/main.go
+cd server && POSTGRES_URL="postgres://argus:argus@localhost:5432/argus?sslmode=disable" \
+  go run ./cmd/main.go
 
 # Terminal 2 — Next.js dashboard (port 3000) ← easy to miss
 cd ui && npm run dev
@@ -312,5 +325,9 @@ server/       Go server — ingest, auth, baselines, drift detection, Slack aler
     auth/     JWT, OAuth (GitHub + Google), API key middleware
 ui/           Next.js 14 dashboard (TypeScript, Tailwind, shadcn/ui)
 deploy/       Dockerfile + pm2 ecosystem config
+  terraform/  AWS infrastructure — ECS, RDS, ALB, Route 53, Secrets Manager, IAM
+.github/
+  workflows/  GitHub Actions — test + build + deploy to ECS on push to main
 docs/         Documentation
+  cloud.md    Cloud developer guide
 ```
