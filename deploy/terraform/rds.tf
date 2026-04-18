@@ -20,6 +20,7 @@ resource "aws_db_instance" "argus" {
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = false
 
+  storage_encrypted         = true
   backup_retention_period   = 7
   skip_final_snapshot       = false
   final_snapshot_identifier = "argus-final"

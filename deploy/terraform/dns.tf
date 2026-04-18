@@ -4,7 +4,7 @@ data "aws_route53_zone" "argus" {
   private_zone = false
 }
 
-# ACM certificate (must be in us-east-1 for ALB — we're already in us-east-1)
+# ACM certificate — must be in the same region as the ALB
 resource "aws_acm_certificate" "argus" {
   domain_name               = var.domain
   subject_alternative_names = ["*.${var.domain}"]

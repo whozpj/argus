@@ -48,11 +48,12 @@ resource "aws_ecs_task_definition" "argus" {
     }]
 
     environment = [
-      { name = "ARGUS_ADDR",     value = ":4000" },
-      { name = "ARGUS_BASE_URL", value = "https://${var.domain}" },
-      { name = "ARGUS_UI_URL",   value = "https://${var.domain}" },
-      { name = "PORT",           value = "3000" },
-      { name = "HOSTNAME",       value = "0.0.0.0" },
+      { name = "ARGUS_ADDR",          value = ":4000" },
+      { name = "ARGUS_BASE_URL",      value = "https://${var.domain}" },
+      { name = "ARGUS_UI_URL",        value = "https://${var.domain}" },
+      { name = "ARGUS_SLACK_WEBHOOK", value = "" },  # override at runtime to enable Slack alerts
+      { name = "PORT",                value = "3000" },
+      { name = "HOSTNAME",            value = "0.0.0.0" },
     ]
 
     secrets = [
