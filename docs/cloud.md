@@ -110,7 +110,7 @@ JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key gene
 Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware, user settings page (`/settings`) with display name editing (`PATCH /api/v1/me`). Playwright e2e tests for login, callback, dashboard, and settings.
 
 **Plan 5 — AWS Infrastructure** ✅ Done
-ECS Fargate + RDS PostgreSQL 15 + ALB + Route 53/ACM + Secrets Manager. GitHub Actions deploys on push to `main` via OIDC (no long-lived AWS keys). All infrastructure managed by Terraform in `deploy/terraform/`. Live at [argus-sdk.com](https://argus-sdk.com) once you run `terraform apply` and complete the one-time setup steps in `docs/superpowers/plans/2026-04-16-argus-cloud-plan-5-aws-infra.md` (Task 12).
+ECS Fargate + RDS PostgreSQL 15 + ALB + Route 53/ACM + Secrets Manager. GitHub Actions deploys on push to `main` via OIDC (no long-lived AWS keys). All infrastructure managed by Terraform in `deploy/terraform/`. Live at [argus-sdk.com](https://argus-sdk.com).
 
 ---
 
