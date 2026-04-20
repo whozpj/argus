@@ -19,7 +19,7 @@ terraform {
   #             --key-schema AttributeName=LockID,KeyType=HASH \
   #             --billing-mode PAY_PER_REQUEST --region us-east-1
   backend "s3" {
-    bucket         = "argus-terraform-state"
+    bucket         = "argus-terraform-state-626285765745"
     key            = "argus/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "argus-terraform-locks"
