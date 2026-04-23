@@ -1,556 +1,240 @@
-"use client";
+import Link from "next/link";
+import { Zap, CheckCircle, Shield, Activity, Bell, Server, Sparkles, ArrowRight } from "lucide-react";
+import DashboardDemo from "@/components/DashboardDemo";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Database,
-  LogOut,
-  RefreshCw,
-  Zap,
-} from "lucide-react";
-
-import { fetchMe, fetchBaselines, logout } from "@/lib/api";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { BaselinesResponse, MeResponse, Project } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import type { BaselineModel } from "@/lib/types";
-import { Settings } from "lucide-react";
-
-// ─── Main dashboard ────────────────────────────────────────────────────────────
-
-function DashboardInner() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const selectedProject = params.get("project") ?? "";
-
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [data, setData] = useState<BaselinesResponse | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Auth check — redirect to /login if no valid token.
-  useEffect(() => {
-    fetchMe()
-      .then((m) => {
-        setMe(m);
-        // Auto-select first project if none in URL.
-        if (!params.get("project") && m.projects.length > 0) {
-          const url = new URL(window.location.href);
-          url.searchParams.set("project", m.projects[0].id);
-          router.replace(url.pathname + url.search);
-        }
-      })
-      .catch(() => {
-        router.replace("/login");
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch baselines whenever the selected project changes.
-  const loadBaselines = useCallback(
-    (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setFetchError(null);
-
-      fetchBaselines(selectedProject || undefined)
-        .then((d) => {
-          setData(d);
-        })
-        .catch((e: Error) => setFetchError(e.message))
-        .finally(() => {
-          setLoading(false);
-          setRefreshing(false);
-        });
-    },
-    [selectedProject],
-  );
-
-  useEffect(() => {
-    if (me) loadBaselines();
-  }, [me, loadBaselines]);
-
-  const handleProjectChange = (id: string | null) => {
-    if (!id) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("project", id);
-    router.push(url.pathname + url.search);
-  };
-
-  const handleLogout = () => {
-    logout();
-    router.replace("/login");
-  };
-
-  const alertedModels = data?.baselines.filter((b) => b.drift_alerted) ?? [];
-  const checkedModels =
-    data?.baselines.filter((b) => b.drift_score > 0 || b.drift_alerted) ?? [];
-  const currentProject = me?.projects.find((p) => p.id === selectedProject);
-
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background" data-testid="dashboard">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
-          {/* Brand */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary text-primary-foreground">
-              <Activity className="h-4 w-4" />
-            </div>
-            <span className="font-semibold tracking-tight text-sm">Argus</span>
-            <span className="hidden sm:block text-muted-foreground text-sm">
-              / LLM Drift Monitor
-            </span>
-          </div>
+    <div className="min-h-screen bg-white text-[#202124]">
+      <TopNav />
+      <Hero />
+      <Stats />
+      <DemoSection />
+      <Features />
+      <CTA />
+      <Footer />
+    </div>
+  );
+}
 
-          {/* Right controls */}
-          <div className="flex items-center gap-2">
-            {/* Project selector */}
-            {me && me.projects.length > 0 && (
-              <Select
-                value={selectedProject}
-                onValueChange={handleProjectChange}
-              >
-                <SelectTrigger
-                  className="h-8 text-sm w-44"
-                  data-testid="project-selector"
-                >
-                  {/* Render the name directly — Base UI SelectValue shows the raw value (ID) */}
-                  <span className="flex-1 text-left truncate">
-                    {me.projects.find((p) => p.id === selectedProject)?.name ?? "Select project"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {me.projects.map((p: Project) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+// ─── Top nav ──────────────────────────────────────────────────────────────────
 
-            {/* Refresh */}
-            <button
-              onClick={() => loadBaselines(true)}
-              disabled={refreshing}
-              aria-label="Refresh"
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
-              />
-            </button>
-
-            {/* User dropdown */}
-            {me && (
-              <div className="pl-2 border-l">
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    data-testid="user-email"
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors max-w-40 truncate hidden md:block"
-                    title={me.email}
-                  >
-                    {me.display_name ?? me.email}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem
-                      onClick={() => router.push("/settings")}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      data-testid="sign-out"
-                      onClick={handleLogout}
-                      className="flex items-center gap-2 cursor-pointer text-muted-foreground"
-                    >
-                      <LogOut className="h-3.5 w-3.5" />
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
-          </div>
+function TopNav() {
+  return (
+    <nav className="sticky top-0 z-20 bg-white border-b border-[#e0e0e0] h-14 flex items-center px-6">
+      <Link href="/" className="flex items-center gap-2">
+        <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#1a73e8] text-white">
+          <Zap className="h-4 w-4" />
         </div>
-      </header>
-
-      {/* ── Main content ────────────────────────────────────────────────────── */}
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        {loading ? (
-          <LoadingSkeleton />
-        ) : fetchError ? (
-          <ErrorBanner message={fetchError} onRetry={() => loadBaselines()} />
-        ) : data ? (
-          <>
-            {/* Project heading */}
-            {currentProject && (
-              <div>
-                <h2 className="text-base font-semibold">{currentProject.name}</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Project ID:{" "}
-                  <code className="font-mono">{currentProject.id}</code>
-                </p>
-              </div>
-            )}
-
-            {/* Drift alert banner */}
-            {alertedModels.length > 0 && (
-              <div
-                className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-950/20 p-4"
-                data-testid="drift-alert"
-              >
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-sm mb-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Drift detected on {alertedModels.length} model
-                  {alertedModels.length > 1 ? "s" : ""}
-                </div>
-                <ul className="space-y-1">
-                  {alertedModels.map((b) => (
-                    <li
-                      key={b.model}
-                      className="text-xs text-amber-800 dark:text-amber-300 font-mono pl-6"
-                    >
-                      {b.model}
-                      <span className="text-amber-600">
-                        {" "}· score {b.drift_score.toFixed(2)}
-                      </span>
-                      <span className="text-amber-500">
-                        {" "}· p(tok) {b.p_output_tokens.toFixed(4)} · p(lat){" "}
-                        {b.p_latency_ms.toFixed(4)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* All-clear banner */}
-            {checkedModels.length > 0 && alertedModels.length === 0 && (
-              <div className="rounded-xl border border-emerald-300 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-950/20 px-4 py-3 flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-sm">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                All models within baseline — no drift detected
-              </div>
-            )}
-
-            {/* Summary cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard
-                label="Total Events"
-                value={data.total_events.toLocaleString()}
-                icon={<Database className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Models"
-                value={data.baselines.length}
-                icon={<Zap className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Baselines Ready"
-                value={data.baselines.filter((b) => b.is_ready).length}
-                icon={<CheckCircle className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Alerts"
-                value={alertedModels.length}
-                icon={<AlertTriangle className="h-4 w-4" />}
-                highlight={alertedModels.length > 0}
-              />
-            </div>
-
-            {/* Models table */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">Models</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {data.baselines.length === 0 ? (
-                  <EmptyState projectName={currentProject?.name} />
-                ) : (
-                  <BaselineTable baselines={data.baselines} />
-                )}
-              </CardContent>
-            </Card>
-          </>
-        ) : null}
-      </main>
-    </div>
-  );
-}
-
-export default function DashboardPage() {
-  return (
-    <Suspense>
-      <DashboardInner />
-    </Suspense>
-  );
-}
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  value,
-  icon,
-  highlight = false,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ReactNode;
-  highlight?: boolean;
-}) {
-  return (
-    <Card
-      className={highlight ? "border-amber-300 dark:border-amber-700/50" : ""}
-    >
-      <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
-          {label}
-        </CardTitle>
-        <span
-          className={
-            highlight ? "text-amber-500" : "text-muted-foreground"
-          }
+        <span className="font-semibold text-[15px]">Argus</span>
+      </Link>
+      <div className="ml-8 flex items-center gap-6 text-sm text-[#5f6368]">
+        <Link href="/docs/quickstart" className="hover:text-[#202124]">Docs</Link>
+        <a href="#pricing" className="hover:text-[#202124]">Pricing</a>
+        <a
+          href="https://github.com/whozpj/argus"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="hover:text-[#202124]"
         >
-          {icon}
+          GitHub
+        </a>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <Link href="/login" className="text-sm text-[#5f6368] hover:text-[#202124]">Sign in</Link>
+        <Link
+          href="/login"
+          className="inline-flex items-center h-8 px-4 rounded-md bg-[#1a73e8] text-white text-sm font-medium hover:bg-[#1765cc]"
+        >
+          Get started free
+        </Link>
+      </div>
+    </nav>
+  );
+}
+
+// ─── Hero ─────────────────────────────────────────────────────────────────────
+
+function Hero() {
+  return (
+    <section className="max-w-6xl mx-auto px-6 py-20 grid lg:grid-cols-2 gap-12 items-center">
+      <div className="space-y-6">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1a73e8] bg-[#e8f0fe] rounded-full px-3 py-1">
+          <Sparkles className="h-3 w-3" />
+          Now in public beta
         </span>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <p
-          className={`text-2xl font-bold tabular-nums ${
-            highlight ? "text-amber-600 dark:text-amber-400" : ""
-          }`}
-        >
-          {value}
+        <h1 className="text-5xl font-semibold tracking-tight leading-[1.1]">
+          Know when your LLM <span className="text-[#1a73e8]">behavior changes</span> before users do
+        </h1>
+        <p className="text-lg text-[#5f6368] max-w-xl">
+          Argus is a drift detector for production LLM apps. One line to instrument, zero prompt data stored, alerts in Slack the moment a model starts behaving differently.
         </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DriftBar({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  const color =
-    score >= 0.7
-      ? "bg-amber-500"
-      : score >= 0.4
-        ? "bg-orange-400"
-        : "bg-emerald-500";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs tabular-nums text-muted-foreground">
-        {score.toFixed(2)}
-      </span>
-    </div>
-  );
-}
-
-function StatusBadge({ b }: { b: BaselineModel }) {
-  if (b.drift_alerted)
-    return (
-      <Badge className="bg-amber-500 text-white hover:bg-amber-500 text-xs">
-        Drift
-      </Badge>
-    );
-  if (b.is_ready && b.drift_score > 0)
-    return (
-      <Badge
-        variant="outline"
-        className="text-emerald-600 border-emerald-400 text-xs"
-      >
-        OK
-      </Badge>
-    );
-  if (b.is_ready)
-    return (
-      <Badge variant="outline" className="text-xs">
-        Monitoring
-      </Badge>
-    );
-  return (
-    <Badge variant="secondary" className="text-xs">
-      {b.count}/200
-    </Badge>
-  );
-}
-
-function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
-  const hasDrift = baselines.some((b) => b.drift_score > 0 || b.drift_alerted);
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="text-xs">
-          <TableHead className="pl-6">Model</TableHead>
-          <TableHead className="text-right">Events</TableHead>
-          <TableHead className="text-right hidden sm:table-cell">
-            Avg Tokens
-          </TableHead>
-          <TableHead className="text-right hidden sm:table-cell">
-            Avg Latency
-          </TableHead>
-          <TableHead className="text-center hidden md:table-cell">
-            Baseline
-          </TableHead>
-          {hasDrift && <TableHead className="text-center">Drift</TableHead>}
-          <TableHead className="text-center pr-6">Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {baselines.map((b) => (
-          <TableRow
-            key={b.model}
-            className={
-              b.drift_alerted
-                ? "bg-amber-50/40 dark:bg-amber-950/10"
-                : ""
-            }
+        <div className="flex items-center gap-3 pt-2">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 h-10 px-5 rounded-md bg-[#1a73e8] text-white text-sm font-medium hover:bg-[#1765cc]"
           >
-            <TableCell className="pl-6 font-mono text-xs">{b.model}</TableCell>
-            <TableCell className="text-right text-sm tabular-nums">
-              {b.count.toLocaleString()}
-            </TableCell>
-            <TableCell className="text-right hidden sm:table-cell">
-              <span className="text-sm tabular-nums">
-                {b.mean_output_tokens}
-              </span>
-              <span className="text-xs text-muted-foreground ml-1">
-                ±{b.stddev_output_tokens}
-              </span>
-            </TableCell>
-            <TableCell className="text-right hidden sm:table-cell">
-              <span className="text-sm tabular-nums">{b.mean_latency_ms}</span>
-              <span className="text-xs text-muted-foreground ml-1">
-                ms ±{b.stddev_latency_ms}
-              </span>
-            </TableCell>
-            <TableCell className="text-center hidden md:table-cell">
-              {b.is_ready ? (
-                <Badge variant="default" className="text-xs">
-                  Ready
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="text-xs">
-                  {b.count}/200
-                </Badge>
-              )}
-            </TableCell>
-            {hasDrift && (
-              <TableCell className="text-center">
-                {b.drift_score > 0 || b.drift_alerted ? (
-                  <DriftBar score={b.drift_score} />
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-              </TableCell>
-            )}
-            <TableCell className="text-center pr-6">
-              <StatusBadge b={b} />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+            Start for free <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/docs/quickstart"
+            className="inline-flex items-center h-10 px-5 rounded-md border border-[#dadce0] text-sm font-medium hover:bg-[#f1f3f4]"
+          >
+            Read the docs
+          </Link>
+        </div>
+      </div>
+
+      {/* Terminal mock */}
+      <div className="bg-[#202124] rounded-lg shadow-xl overflow-hidden border border-[#3c4043]">
+        <div className="h-8 bg-[#3c4043] flex items-center gap-1.5 px-3">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+        </div>
+        <pre className="p-5 text-[13px] leading-6 font-mono text-[#e8eaed]">
+          <span className="text-[#5f6368]">$</span> pip install argus-sdk{"\n"}
+          <span className="text-[#34a853]">✓ installed argus-sdk 0.4.0</span>{"\n\n"}
+          <span className="text-[#5f6368]">&gt;&gt;&gt;</span> <span className="text-[#8ab4f8]">from</span> argus_sdk <span className="text-[#8ab4f8]">import</span> patch{"\n"}
+          <span className="text-[#5f6368]">&gt;&gt;&gt;</span> patch(api_key=<span className="text-[#fdd663]">&quot;argus_sk_...&quot;</span>){"\n"}
+          <span className="text-[#5f6368]"># ... 4 hours later ...</span>{"\n"}
+          <span className="text-[#f59e0b]">⚠ DRIFT — output_tokens +42%</span>
+        </pre>
+      </div>
+    </section>
   );
 }
 
-function EmptyState({ projectName }: { projectName?: string }) {
-  return (
-    <div className="py-16 text-center space-y-3">
-      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted">
-        <Database className="h-5 w-5 text-muted-foreground" />
-      </div>
-      <div>
-        <p className="text-sm font-medium">No events yet</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Instrument your app with the Argus SDK and point it to{" "}
-          {projectName ? (
-            <strong>{projectName}</strong>
-          ) : (
-            "this project"
-          )}
-          .
-        </p>
-      </div>
-      <div className="inline-block">
-        <code className="text-xs bg-muted rounded px-2 py-1 font-mono">
-          patch(endpoint, api_key=&quot;argus_sk_…&quot;)
-        </code>
-      </div>
-    </div>
-  );
-}
+// ─── Stats bar ────────────────────────────────────────────────────────────────
 
-function ErrorBanner({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
+function Stats() {
+  const stats: [string, string][] = [
+    ["1 line", "to instrument"],
+    ["60s", "drift check interval"],
+    ["98%", "detection rate at +20% shift"],
+    ["0%", "prompt data stored"],
+  ];
   return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 flex items-start gap-3">
-      <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-destructive">
-          Failed to load data
-        </p>
-        <p className="text-xs text-muted-foreground mt-0.5 truncate">
-          {message}
-        </p>
-      </div>
-      <button
-        onClick={onRetry}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-      >
-        Retry
-      </button>
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 rounded-xl border bg-muted/40" />
+    <section className="border-y border-[#e0e0e0] bg-white">
+      <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-4 gap-6">
+        {stats.map(([v, l]) => (
+          <div key={l} className="text-center">
+            <div className="text-3xl font-semibold text-[#202124]">{v}</div>
+            <div className="text-xs text-[#5f6368] mt-1 uppercase tracking-wider">{l}</div>
+          </div>
         ))}
       </div>
-      <div className="h-64 rounded-xl border bg-muted/40" />
-    </div>
+    </section>
+  );
+}
+
+// ─── Demo section ─────────────────────────────────────────────────────────────
+
+function DemoSection() {
+  return (
+    <section className="bg-[#f8f9fa] py-20">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-10">
+          <span className="text-xs font-medium text-[#5f6368] uppercase tracking-wider">
+            See it in action — live dashboard
+          </span>
+          <h2 className="text-3xl font-semibold mt-2">Watch drift get caught in real time</h2>
+        </div>
+        <DashboardDemo />
+      </div>
+    </section>
+  );
+}
+
+// ─── Features ─────────────────────────────────────────────────────────────────
+
+function Features() {
+  const features: { icon: React.ReactNode; title: string; body: string }[] = [
+    {
+      icon: <Activity className="h-5 w-5" />,
+      title: "Statistical drift detection",
+      body: "Mann-Whitney U + Bonferroni correction. No thresholds to tune.",
+    },
+    {
+      icon: <Shield className="h-5 w-5" />,
+      title: "Zero prompt exposure",
+      body: "Only derived signals (token counts, latency, finish reason). Never prompts or completions.",
+    },
+    {
+      icon: <CheckCircle className="h-5 w-5" />,
+      title: "Non-blocking instrumentation",
+      body: "Background thread. Adds nothing to your request latency.",
+    },
+    {
+      icon: <Bell className="h-5 w-5" />,
+      title: "Slack alerts",
+      body: "Hysteresis keeps alerts quiet. Fires once, clears cleanly.",
+    },
+    {
+      icon: <Sparkles className="h-5 w-5" />,
+      title: "Multi-model support",
+      body: "Anthropic, OpenAI, any compatible provider. One SDK.",
+    },
+    {
+      icon: <Server className="h-5 w-5" />,
+      title: "Self-host or cloud",
+      body: "Run a Docker container or use Argus Cloud. Same code, same SDK.",
+    },
+  ];
+  return (
+    <section className="max-w-6xl mx-auto px-6 py-20">
+      <h2 className="text-3xl font-semibold text-center">Everything you need, nothing you don&apos;t</h2>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-12">
+        {features.map((f) => (
+          <div key={f.title} className="rounded-lg border border-[#e0e0e0] bg-white p-6">
+            <div className="w-10 h-10 rounded-md bg-[#e8f0fe] text-[#1a73e8] flex items-center justify-center mb-4">
+              {f.icon}
+            </div>
+            <h3 className="font-semibold">{f.title}</h3>
+            <p className="text-sm text-[#5f6368] mt-1">{f.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ─── CTA ──────────────────────────────────────────────────────────────────────
+
+function CTA() {
+  return (
+    <section id="pricing" className="bg-[#e8f0fe] py-20">
+      <div className="max-w-3xl mx-auto px-6 text-center">
+        <h2 className="text-3xl font-semibold">Start monitoring your LLMs today</h2>
+        <p className="text-[#5f6368] mt-3">Free to start. No credit card required.</p>
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-2 mt-6 h-11 px-6 rounded-md bg-[#1a73e8] text-white text-sm font-medium hover:bg-[#1765cc]"
+        >
+          Create free account <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+// ─── Footer ───────────────────────────────────────────────────────────────────
+
+function Footer() {
+  return (
+    <footer className="border-t border-[#e0e0e0] py-8">
+      <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-[#5f6368]">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-5 h-5 rounded-sm bg-[#1a73e8] text-white">
+            <Zap className="h-3 w-3" />
+          </div>
+          <span>Argus</span>
+        </div>
+        <div className="flex items-center gap-5">
+          <Link href="/docs/quickstart" className="hover:text-[#202124]">Docs</Link>
+          <a href="https://github.com/whozpj/argus" target="_blank" rel="noreferrer noopener" className="hover:text-[#202124]">GitHub</a>
+          <span>Privacy</span>
+        </div>
+      </div>
+    </footer>
   );
 }

@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle,
   Database,
@@ -137,11 +136,13 @@ function DashboardInner() {
 
 export default function DashboardPage() {
   return (
-    <Shell>
-      <Suspense>
-        <DashboardInner />
-      </Suspense>
-    </Shell>
+    <Suspense>
+      <Shell>
+        <Suspense>
+          <DashboardInner />
+        </Suspense>
+      </Shell>
+    </Suspense>
   );
 }
 

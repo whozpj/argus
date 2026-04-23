@@ -6,7 +6,6 @@ import { LogOut, Settings as SettingsIcon, Zap, LayoutDashboard, Activity, Bell,
 
 import { fetchMe, logout } from "@/lib/api";
 import type { MeResponse, Project } from "@/lib/types";
-import { DOCS_PAGES } from "@/lib/docs";
 import {
   Select,
   SelectContent,
