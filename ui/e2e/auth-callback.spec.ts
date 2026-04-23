@@ -18,7 +18,7 @@ test.describe("Auth callback page", () => {
     await expect(page).toHaveURL("/login");
   });
 
-  test("exchanges code for token and redirects to / on success", async ({
+  test("exchanges code for token and redirects to /dashboard on success", async ({
     page,
   }) => {
     // Mock the token-exchange endpoint.
@@ -54,14 +54,8 @@ test.describe("Auth callback page", () => {
 
     await page.goto("/auth/callback?code=valid-code-123");
 
-    // Should end up at the dashboard — URL contains "/" but not "/login" or "/auth/callback".
-    await page.waitForFunction(
-      () =>
-        !window.location.pathname.startsWith("/login") &&
-        !window.location.pathname.startsWith("/auth"),
-      { timeout: 8000 },
-    );
-    expect(page.url()).not.toContain("/login");
+    await page.waitForURL(/\/dashboard/, { timeout: 8000 });
+    expect(page.url()).toContain("/dashboard");
 
     // Token must be stored in localStorage.
     const token = await page.evaluate(() => localStorage.getItem("argus_token"));
