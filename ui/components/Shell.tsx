@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { LogOut, Settings as SettingsIcon, Zap, LayoutDashboard, Activity, Bell, BookOpen } from "lucide-react";
 
 import { fetchMe, logout } from "@/lib/api";
+import { DOCS_PAGES } from "@/lib/docs";
 import type { MeResponse, Project } from "@/lib/types";
 import {
   Select,
@@ -195,15 +196,39 @@ export default function Shell({ children }: { children: ReactNode }) {
           <nav className="py-2">
             {NAV_ITEMS.map((item) => {
               const active = item.matches(pathname, search);
+              const isDocs = item.label === "Docs";
               return (
-                <SidebarLink
-                  key={item.href}
-                  href={preserveProject(item.href, currentProjectID)}
-                  active={active}
-                  icon={item.icon}
-                  label={item.label}
-                  onClick={router.push}
-                />
+                <div key={item.href}>
+                  <SidebarLink
+                    href={preserveProject(item.href, currentProjectID)}
+                    active={active}
+                    icon={item.icon}
+                    label={item.label}
+                    onClick={router.push}
+                  />
+                  {isDocs && pathname.startsWith("/docs") && (
+                    <div className="pb-2">
+                      {DOCS_PAGES.map((p) => {
+                        const slugActive = pathname === `/docs/${p.slug}`;
+                        return (
+                          <button
+                            key={p.slug}
+                            onClick={() => router.push(`/docs/${p.slug}`)}
+                            data-testid={`docs-subnav-${p.slug}`}
+                            className={
+                              "w-full flex items-center pl-10 pr-4 h-7 text-[12px] text-left transition-colors " +
+                              (slugActive
+                                ? "text-[#1a73e8] font-medium bg-[#e8f0fe]"
+                                : "text-[#5f6368] hover:bg-[#f1f3f4]")
+                            }
+                          >
+                            {p.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
