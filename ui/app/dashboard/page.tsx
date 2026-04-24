@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle,
+  Copy,
   Database,
   RefreshCw,
+  Terminal,
   Zap,
 } from "lucide-react";
 
@@ -56,13 +58,8 @@ function DashboardInner() {
   );
 
   useEffect(() => {
-    if (!projectID) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
     loadBaselines();
-  }, [projectID, loadBaselines]);
+  }, [loadBaselines]);
 
   // Auto-refresh every 60s (same cadence as server detector).
   useEffect(() => {
@@ -103,37 +100,41 @@ function DashboardInner() {
       ) : fetchError ? (
         <ErrorBanner message={fetchError} onRetry={() => loadBaselines()} />
       ) : data ? (
-        <>
-          {/* Overview: cards + banner + table */}
-          {tab === "overview" && (
-            <>
-              <SummaryCards data={data} alertedCount={alertedModels.length} />
-              {alertedModels.length > 0 && <DriftBanner models={alertedModels} />}
-              {alertedModels.length === 0 && data.baselines.some((b) => b.drift_score > 0) && <AllClear />}
-              <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
-            </>
-          )}
-          {/* Models: cards + table only */}
-          {tab === "models" && (
-            <>
-              <SummaryCards data={data} alertedCount={alertedModels.length} />
-              <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
-            </>
-          )}
-          {/* Alerts: banner + table filtered to drift-alerted rows */}
-          {tab === "alerts" && (
-            <>
-              {alertedModels.length > 0 ? (
-                <>
-                  <DriftBanner models={alertedModels} />
-                  <ModelsCard baselines={alertedModels} projectName={selectedProject?.name} />
-                </>
-              ) : (
-                <AllClear />
-              )}
-            </>
-          )}
-        </>
+        data.total_events === 0 ? (
+          <Onboarding onRefresh={() => loadBaselines(true)} refreshing={refreshing} />
+        ) : (
+          <>
+            {/* Overview: cards + banner + table */}
+            {tab === "overview" && (
+              <>
+                <SummaryCards data={data} alertedCount={alertedModels.length} />
+                {alertedModels.length > 0 && <DriftBanner models={alertedModels} />}
+                {alertedModels.length === 0 && data.baselines.some((b) => b.drift_score > 0) && <AllClear />}
+                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
+              </>
+            )}
+            {/* Models: cards + table only */}
+            {tab === "models" && (
+              <>
+                <SummaryCards data={data} alertedCount={alertedModels.length} />
+                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
+              </>
+            )}
+            {/* Alerts: banner + table filtered to drift-alerted rows */}
+            {tab === "alerts" && (
+              <>
+                {alertedModels.length > 0 ? (
+                  <>
+                    <DriftBanner models={alertedModels} />
+                    <ModelsCard baselines={alertedModels} projectName={selectedProject?.name} />
+                  </>
+                ) : (
+                  <AllClear />
+                )}
+              </>
+            )}
+          </>
+        )
       ) : null}
     </div>
   );
@@ -307,6 +308,119 @@ function EmptyState({ projectName }: { projectName?: string }) {
       <code className="inline-block text-xs bg-[#f1f3f4] rounded px-2 py-1 font-mono">
         patch(endpoint, api_key=&quot;argus_sk_…&quot;)
       </code>
+    </div>
+  );
+}
+
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+
+function CodeSnippet({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const handle = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="relative group mt-2">
+      <pre className="bg-[#f8f9fa] border border-[#e8eaed] rounded-md text-xs font-mono p-3 overflow-x-auto text-[#202124] leading-relaxed">{code}</pre>
+      <button
+        onClick={handle}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 bg-white border border-[#dadce0] rounded px-2 py-0.5 text-[10px] text-[#5f6368] hover:bg-[#f1f3f4]"
+      >
+        <Copy className="h-3 w-3" />
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+function OnboardingStep({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-4 bg-white border border-[#dadce0] rounded-lg p-5">
+      <div className="shrink-0 w-7 h-7 rounded-full bg-[#1a73e8] text-white text-sm font-medium flex items-center justify-center">
+        {number}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[#202124]">{title}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Onboarding({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+  return (
+    <div className="max-w-2xl space-y-8">
+      {/* Header */}
+      <div className="flex items-start gap-4">
+        <div className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#e8f0fe]">
+          <Terminal className="h-5 w-5 text-[#1a73e8]" />
+        </div>
+        <div>
+          <h2 className="text-lg font-medium text-[#202124]">Get started with Argus</h2>
+          <p className="text-sm text-[#5f6368] mt-0.5">
+            Instrument your LLM app in minutes. Argus captures signals from every call and detects behavioral drift automatically.
+          </p>
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-3">
+        <OnboardingStep number={1} title="Install the SDK">
+          <CodeSnippet code="pip install argus-sdk" />
+          <p className="text-xs text-[#5f6368] mt-2">
+            Using OpenAI?{" "}
+            <code className="bg-[#f1f3f4] px-1 rounded">pip install &quot;argus-sdk[openai]&quot;</code>
+          </p>
+        </OnboardingStep>
+
+        <OnboardingStep number={2} title="Add one line before your LLM client">
+          <CodeSnippet code={`from argus_sdk import patch
+patch(api_key="argus_sk_...")   # get your key from the CLI: argus projects
+
+import anthropic
+client = anthropic.Anthropic()  # automatically instrumented`} />
+          <p className="text-xs text-[#5f6368] mt-2">
+            Works the same for <code className="bg-[#f1f3f4] px-1 rounded">AsyncAnthropic</code>,{" "}
+            <code className="bg-[#f1f3f4] px-1 rounded">OpenAI</code>, and{" "}
+            <code className="bg-[#f1f3f4] px-1 rounded">AsyncOpenAI</code>. Streaming is supported too.
+          </p>
+        </OnboardingStep>
+
+        <OnboardingStep number={3} title="Get an API key">
+          <p className="text-xs text-[#5f6368] mt-1">Log in and list your projects to find your key:</p>
+          <CodeSnippet code={`pip install argus-sdk
+argus login     # opens browser — sign in with GitHub or Google
+argus projects  # shows your project IDs and key prefixes`} />
+        </OnboardingStep>
+
+        <OnboardingStep number={4} title="Make LLM calls — Argus does the rest">
+          <p className="text-xs text-[#5f6368] mt-1">
+            Every response is captured automatically in the background — no changes to your existing code needed.
+            Argus needs <strong>200 events per model</strong> to build a baseline, then checks for drift every 60 seconds.
+          </p>
+          <div className="mt-3 flex items-start gap-2 bg-[#e8f0fe] rounded-md p-3">
+            <CheckCircle className="h-3.5 w-3.5 text-[#1a73e8] mt-0.5 shrink-0" />
+            <p className="text-xs text-[#1a73e8]">
+              No prompt text or completion text is ever sent — only derived signals (tokens, latency, finish reason).
+            </p>
+          </div>
+        </OnboardingStep>
+      </div>
+
+      {/* Check button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 h-8 px-4 rounded-md bg-[#1a73e8] text-white text-sm hover:bg-[#1557b0] disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Checking…" : "Check for events"}
+        </button>
+        <span className="text-xs text-[#5f6368]">No events received yet</span>
+      </div>
     </div>
   );
 }
