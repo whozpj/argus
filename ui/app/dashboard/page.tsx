@@ -33,7 +33,7 @@ function DashboardInner() {
 
   const [data, setData] = useState<BaselinesResponse | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const projectID = selectedProject?.id ?? "";
@@ -56,7 +56,12 @@ function DashboardInner() {
   );
 
   useEffect(() => {
-    if (projectID) loadBaselines();
+    if (!projectID) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    loadBaselines();
   }, [projectID, loadBaselines]);
 
   // Auto-refresh every 60s (same cadence as server detector).
