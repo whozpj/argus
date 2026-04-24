@@ -42,6 +42,7 @@ def _try_patch_anthropic_class(endpoint: str, api_key: str | None) -> None:
     try:
         import anthropic
         _wrap_class_init(anthropic.Anthropic, endpoint, provider="anthropic", api_key=api_key)
+        _wrap_class_init(anthropic.AsyncAnthropic, endpoint, provider="anthropic", api_key=api_key)
     except ImportError:
         pass
 
@@ -50,6 +51,7 @@ def _try_patch_openai_class(endpoint: str, api_key: str | None) -> None:
     try:
         import openai
         _wrap_class_init(openai.OpenAI, endpoint, provider="openai", api_key=api_key)
+        _wrap_class_init(openai.AsyncOpenAI, endpoint, provider="openai", api_key=api_key)
     except ImportError:
         pass
 

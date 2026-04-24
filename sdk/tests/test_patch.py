@@ -321,3 +321,351 @@ def test_endpoint_passed_to_reporter():
         client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
 
     assert posted_endpoints[0] == "http://my-argus-server:4000"
+
+
+# ---------------------------------------------------------------------------
+# Async Anthropic — non-streaming
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_async_anthropic_captures_event():
+    posted = []
+
+    client = MagicMock()
+    async def async_create(*args, **kwargs):
+        return _anthropic_response()
+    client.messages.create = async_create
+
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        anthropic_patch(client, "http://localhost:4000")
+        await client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["model"] == "claude-sonnet-4-6"
+    assert e["provider"] == "anthropic"
+    assert e["input_tokens"] == 100
+    assert e["output_tokens"] == 50
+
+
+@pytest.mark.asyncio
+async def test_async_anthropic_response_passthrough():
+    client = MagicMock()
+    response = _anthropic_response(output_tokens=77)
+    async def async_create(*args, **kwargs):
+        return response
+    client.messages.create = async_create
+
+    with mock_patch("argus_sdk._anthropic.report"):
+        anthropic_patch(client, "http://localhost:4000")
+        result = await client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[])
+
+    assert result is response
+
+
+# ---------------------------------------------------------------------------
+# Async OpenAI — non-streaming
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_async_openai_captures_event():
+    posted = []
+
+    client = MagicMock()
+    async def async_create(*args, **kwargs):
+        return _openai_response()
+    client.chat.completions.create = async_create
+
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        openai_patch(client, "http://localhost:4000")
+        await client.chat.completions.create(model="gpt-4o", messages=[])
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["model"] == "gpt-4o"
+    assert e["provider"] == "openai"
+    assert e["input_tokens"] == 100
+    assert e["output_tokens"] == 50
+
+
+@pytest.mark.asyncio
+async def test_async_openai_response_passthrough():
+    client = MagicMock()
+    response = _openai_response(completion_tokens=33)
+    async def async_create(*args, **kwargs):
+        return response
+    client.chat.completions.create = async_create
+
+    with mock_patch("argus_sdk._openai.report"):
+        openai_patch(client, "http://localhost:4000")
+        result = await client.chat.completions.create(model="gpt-4o", messages=[])
+
+    assert result is response
+
+
+# ---------------------------------------------------------------------------
+# Anthropic sync streaming
+# ---------------------------------------------------------------------------
+
+def _make_anthropic_stream_events(model="claude-sonnet-4-6", input_tokens=100, output_tokens=50):
+    start = MagicMock()
+    start.type = "message_start"
+    start.message.model = model
+    start.message.usage.input_tokens = input_tokens
+
+    delta = MagicMock()
+    delta.type = "message_delta"
+    delta.usage.output_tokens = output_tokens
+    delta.delta.stop_reason = "end_turn"
+
+    return [start, delta]
+
+
+def test_anthropic_sync_streaming_yields_events():
+    from argus_sdk._anthropic import _SyncAnthropicStreamWrapper
+
+    events = _make_anthropic_stream_events()
+    stream = MagicMock()
+    stream.__iter__ = MagicMock(return_value=iter(events))
+
+    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._anthropic.report"):
+        yielded = list(wrapper)
+
+    assert yielded == events
+
+
+def test_anthropic_sync_streaming_reports_after_exhaustion():
+    from argus_sdk._anthropic import _SyncAnthropicStreamWrapper
+
+    posted = []
+    events = _make_anthropic_stream_events(input_tokens=200, output_tokens=75)
+    stream = MagicMock()
+    stream.__iter__ = MagicMock(return_value=iter(events))
+
+    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        list(wrapper)
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["model"] == "claude-sonnet-4-6"
+    assert e["input_tokens"] == 200
+    assert e["output_tokens"] == 75
+    assert e["finish_reason"] == "end_turn"
+    assert e["provider"] == "anthropic"
+
+
+def test_anthropic_sync_streaming_via_patch():
+    posted = []
+    client = MagicMock()
+    events = _make_anthropic_stream_events()
+    stream = MagicMock()
+    stream.__iter__ = MagicMock(return_value=iter(events))
+    client.messages.create.return_value = stream
+
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        anthropic_patch(client, "http://localhost:4000")
+        result = client.messages.create(model="claude-sonnet-4-6", max_tokens=100, messages=[], stream=True)
+        list(result)
+
+    assert len(posted) == 1
+
+
+# ---------------------------------------------------------------------------
+# Anthropic async streaming
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_async_anthropic_streaming_yields_events():
+    from argus_sdk._anthropic import _AsyncAnthropicStreamWrapper
+
+    events = _make_anthropic_stream_events()
+
+    class FakeAsyncStream:
+        async def __aiter__(self):
+            for e in events:
+                yield e
+
+    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._anthropic.report"):
+        yielded = [e async for e in wrapper]
+
+    assert yielded == events
+
+
+@pytest.mark.asyncio
+async def test_async_anthropic_streaming_reports_after_exhaustion():
+    from argus_sdk._anthropic import _AsyncAnthropicStreamWrapper
+
+    posted = []
+    events = _make_anthropic_stream_events(input_tokens=300, output_tokens=60)
+
+    class FakeAsyncStream:
+        async def __aiter__(self):
+            for e in events:
+                yield e
+
+    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        async for _ in wrapper:
+            pass
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["input_tokens"] == 300
+    assert e["output_tokens"] == 60
+
+
+# ---------------------------------------------------------------------------
+# OpenAI sync streaming
+# ---------------------------------------------------------------------------
+
+def _make_openai_stream_chunks(model="gpt-4o", prompt_tokens=100, completion_tokens=50):
+    chunk1 = MagicMock()
+    chunk1.model = model
+    chunk1.choices = [MagicMock(finish_reason=None)]
+    chunk1.usage = None
+
+    chunk2 = MagicMock()
+    chunk2.model = model
+    chunk2.choices = [MagicMock(finish_reason="stop")]
+    chunk2.usage = None
+
+    chunk_usage = MagicMock()
+    chunk_usage.model = model
+    chunk_usage.choices = []
+    chunk_usage.usage = MagicMock(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+
+    return [chunk1, chunk2, chunk_usage]
+
+
+def test_openai_sync_streaming_yields_chunks():
+    from argus_sdk._openai import _SyncOpenAIStreamWrapper
+
+    chunks = _make_openai_stream_chunks()
+    stream = MagicMock()
+    stream.__iter__ = MagicMock(return_value=iter(chunks))
+
+    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._openai.report"):
+        yielded = list(wrapper)
+
+    assert yielded == chunks
+
+
+def test_openai_sync_streaming_reports_after_exhaustion():
+    from argus_sdk._openai import _SyncOpenAIStreamWrapper
+
+    posted = []
+    chunks = _make_openai_stream_chunks(prompt_tokens=200, completion_tokens=80)
+    stream = MagicMock()
+    stream.__iter__ = MagicMock(return_value=iter(chunks))
+
+    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        list(wrapper)
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["model"] == "gpt-4o"
+    assert e["input_tokens"] == 200
+    assert e["output_tokens"] == 80
+    assert e["finish_reason"] == "stop"
+    assert e["provider"] == "openai"
+
+
+def test_openai_stream_options_injected():
+    """patch() must inject stream_options include_usage=True for stream=True calls."""
+    chunks = _make_openai_stream_chunks()
+    stream_mock = MagicMock()
+    stream_mock.__iter__ = MagicMock(return_value=iter(chunks))
+
+    underlying_create = MagicMock(return_value=stream_mock)
+    client = MagicMock()
+    client.chat.completions.create = underlying_create
+
+    with mock_patch("argus_sdk._openai.report"):
+        openai_patch(client, "http://localhost:4000")
+        result = client.chat.completions.create(model="gpt-4o", messages=[], stream=True)
+        list(result)
+
+    # underlying_create (captured before patching) receives the injected kwargs
+    call_kwargs = underlying_create.call_args[1]
+    assert call_kwargs.get("stream_options", {}).get("include_usage") is True
+
+
+# ---------------------------------------------------------------------------
+# OpenAI async streaming
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_async_openai_streaming_reports_after_exhaustion():
+    from argus_sdk._openai import _AsyncOpenAIStreamWrapper
+
+    posted = []
+    chunks = _make_openai_stream_chunks(prompt_tokens=150, completion_tokens=40)
+
+    class FakeAsyncStream:
+        async def __aiter__(self):
+            for c in chunks:
+                yield c
+
+    wrapper = _AsyncOpenAIStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+
+    with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
+        async for _ in wrapper:
+            pass
+
+    assert len(posted) == 1
+    e = posted[0]
+    assert e["input_tokens"] == 150
+    assert e["output_tokens"] == 40
+
+
+# ---------------------------------------------------------------------------
+# Auto-patch async classes
+# ---------------------------------------------------------------------------
+
+def test_auto_patch_wraps_async_anthropic_class():
+    """patch() in auto-mode must also wrap AsyncAnthropic.__init__."""
+    class FakeAsyncAnthropic:
+        pass
+
+    FakeAsyncAnthropic.__module__ = "anthropic"
+
+    fake_anthropic = MagicMock()
+    fake_anthropic.Anthropic = MagicMock
+    fake_anthropic.AsyncAnthropic = FakeAsyncAnthropic
+
+    with mock_patch.dict("sys.modules", {"anthropic": fake_anthropic}):
+        with mock_patch("argus_sdk._wrap_class_init") as mock_wrap:
+            patch(endpoint="http://localhost:4000")
+
+    calls = [c.args[0] for c in mock_wrap.call_args_list]
+    assert FakeAsyncAnthropic in calls
+
+
+def test_auto_patch_wraps_async_openai_class():
+    """patch() in auto-mode must also wrap AsyncOpenAI.__init__."""
+    class FakeAsyncOpenAI:
+        pass
+
+    FakeAsyncOpenAI.__module__ = "openai"
+
+    fake_openai = MagicMock()
+    fake_openai.OpenAI = MagicMock
+    fake_openai.AsyncOpenAI = FakeAsyncOpenAI
+
+    with mock_patch.dict("sys.modules", {"openai": fake_openai}):
+        with mock_patch("argus_sdk._wrap_class_init") as mock_wrap:
+            patch(endpoint="http://localhost:4000")
+
+    calls = [c.args[0] for c in mock_wrap.call_args_list]
+    assert FakeAsyncOpenAI in calls

@@ -1,6 +1,6 @@
 # argus-sdk
 
-Detect when your LLM's behavior has statistically shifted — one line of code to instrument, one Docker container to run.
+Detect when your LLM's behavior has statistically shifted — one line of code to instrument.
 
 ---
 
@@ -8,7 +8,7 @@ Detect when your LLM's behavior has statistically shifted — one line of code t
 
 LLMs change. Model providers silently update weights, swap infrastructure, or adjust safety filters. Your evals pass, but production quietly drifts. Argus catches this.
 
-`argus-sdk` wraps your existing Anthropic or OpenAI client and captures derived signals from every LLM call — output tokens, latency, finish reason. It ships those signals in the background to a self-hosted Argus server, which runs statistical tests (Mann-Whitney U + Bonferroni correction) to detect distribution shifts and alerts you via Slack when drift is confirmed.
+`argus-sdk` wraps your existing Anthropic or OpenAI client and captures derived signals from every LLM call — output tokens, latency, finish reason. It ships those signals in the background to Argus, which runs statistical tests (Mann-Whitney U + Bonferroni correction) to detect distribution shifts and alerts you via Slack when drift is confirmed.
 
 **No prompt text. No completion text. Derived signals only.**
 
@@ -20,26 +20,21 @@ LLMs change. Model providers silently update weights, swap infrastructure, or ad
 pip install argus-sdk
 ```
 
+For OpenAI support:
+
+```bash
+pip install "argus-sdk[openai]"
+```
+
 ---
 
 ## Quick start
 
-### 1. Run the Argus server
-
-```bash
-docker run -p 4000:4000 -p 3000:3000 -v argus-data:/data ghcr.io/whozpj/argus:latest
-```
-
-Dashboard: `http://localhost:3000`  
-Ingest API: `http://localhost:4000`
-
-### 2. Instrument your client
-
-**Auto-mode** — instruments all clients created after `patch()`:
+### Cloud (argus-sdk.com)
 
 ```python
 from argus_sdk import patch
-patch(endpoint="http://localhost:4000")
+patch(api_key="argus_sk_...")  # defaults to https://argus-sdk.com
 
 import anthropic
 client = anthropic.Anthropic()  # automatically instrumented
@@ -51,28 +46,59 @@ response = client.messages.create(
 )
 ```
 
-**Explicit mode** — instrument a specific instance:
+### Self-hosted
+
+```bash
+docker run -p 4000:4000 -p 3000:3000 -v argus-data:/data ghcr.io/whozpj/argus:latest
+```
+
+```python
+from argus_sdk import patch
+patch(endpoint="http://localhost:4000")
+
+import anthropic
+client = anthropic.Anthropic()
+```
+
+---
+
+## Supported clients
+
+| Client | Sync | Async | Streaming |
+|---|---|---|---|
+| `anthropic.Anthropic` | ✓ | — | ✓ |
+| `anthropic.AsyncAnthropic` | — | ✓ | ✓ |
+| `openai.OpenAI` | ✓ | — | ✓ |
+| `openai.AsyncOpenAI` | — | ✓ | ✓ |
+
+Streaming calls (`stream=True`) are transparently intercepted — the signal is reported after the stream is exhausted. User code is unchanged.
+
+**Note:** `client.messages.stream()` (Anthropic context manager API) is not intercepted.
+
+---
+
+## Explicit mode
+
+Instrument a specific instance instead of all future clients:
 
 ```python
 import anthropic
 from argus_sdk import patch
 
 client = anthropic.Anthropic()
-patch(endpoint="http://localhost:4000", client=client)
+patch(endpoint="https://argus-sdk.com", client=client, api_key="argus_sk_...")
 ```
-
-Both OpenAI and Anthropic sync clients are supported.
 
 ---
 
 ## Flush on exit (short scripts & CLIs)
 
-By default, signals are sent in a background worker thread and flushed automatically when your process exits. For short-lived scripts where you want to guarantee delivery before exit:
+Signals are sent in a background worker thread. For short-lived scripts:
 
 ```python
 from argus_sdk import patch, flush
 
-patch(endpoint="http://localhost:4000")
+patch(api_key="argus_sk_...")
 
 # ... your LLM calls ...
 
@@ -103,19 +129,13 @@ The Argus server builds a baseline per model using Welford's online algorithm (r
 
 ---
 
-## Environment
+## Self-hosted environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `ARGUS_ADDR` | `:4000` | Server listen address |
-| `ARGUS_DB_PATH` | `argus.db` | SQLite file path |
+| `ARGUS_DB_PATH` | `argus.db` | SQLite file path (self-hosted) |
 | `ARGUS_SLACK_WEBHOOK` | _(empty)_ | Slack webhook URL for alerts |
-
----
-
-## Self-hosted
-
-Argus is fully self-hosted. No data leaves your infrastructure. The server is a single Go binary backed by SQLite, bundled with the Next.js dashboard into one Docker image.
 
 ---
 
