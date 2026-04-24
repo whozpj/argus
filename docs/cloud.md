@@ -104,13 +104,19 @@ ok   github.com/whozpj/argus/server/internal/store
 JWT middleware, GitHub + Google OAuth (/auth/github, /auth/google), API key generation + validation, /api/v1/me, /api/v1/projects, /api/v1/projects/:id/keys, /api/v1/auth/token (CLI code exchange).
 
 **Plan 3 — SDK + CLI** ✅ Done
-`api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands. 59 SDK tests passing.
+`api_key` parameter in `patch()`, `argus login` / `argus status` / `argus projects` CLI commands. 76 SDK tests passing.
 
 **Plan 4 — Dashboard** ✅ Done
 Login page (`/login`), OAuth callback (`/auth/callback`), project selector dropdown, per-project baselines via JWT + `?project_id`, CORS middleware, user settings page (`/settings`) with display name editing (`PATCH /api/v1/me`). Playwright e2e tests for login, callback, dashboard, and settings.
 
 **Plan 5 — AWS Infrastructure** ✅ Done
 ECS Fargate + RDS PostgreSQL 15 + ALB + Route 53/ACM + Secrets Manager. GitHub Actions deploys on push to `main` via OIDC (no long-lived AWS keys). All infrastructure managed by Terraform in `deploy/terraform/`. Live at [argus-sdk.com](https://argus-sdk.com).
+
+**Plan 6 — Frontend Redesign** ✅ Done
+GCP Console-style UI. Public landing page at `/` (marketing, stats, animated demo). Dashboard moved to `/dashboard`. Shared `Shell` component (topbar + sidebar) wraps dashboard, settings, docs. Docs section at `/docs/[slug]` with 6 static pages.
+
+**SDK v0.2.0** ✅ Done
+Default endpoint `https://argus-sdk.com`. Async clients (`AsyncAnthropic`, `AsyncOpenAI`). Transparent streaming interception for all four client types. User-Agent header. `openai` optional dep.
 
 ---
 
