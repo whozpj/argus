@@ -48,11 +48,11 @@ def test_reporter_posts_to_correct_url():
         mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
         _post_with_retry("http://localhost:4000", _SAMPLE_EVENT)
 
-    mock_client_instance.post.assert_called_once_with(
-        "http://localhost:4000/api/v1/events",
-        json=_SAMPLE_EVENT,
-        headers={},
-    )
+    call_args = mock_client_instance.post.call_args
+    assert call_args[0][0] == "http://localhost:4000/api/v1/events"
+    assert call_args[1]["json"] == _SAMPLE_EVENT
+    assert "User-Agent" in call_args[1]["headers"]
+    assert call_args[1]["headers"]["User-Agent"].startswith("argus-sdk/")
 
 
 def test_reporter_swallows_connection_error():
@@ -183,3 +183,38 @@ def test_worker_is_daemon():
 
     assert reporter_module._worker_thread is not None
     assert reporter_module._worker_thread.daemon is True
+
+
+# ---------------------------------------------------------------------------
+# User-Agent header tests
+# ---------------------------------------------------------------------------
+
+def test_user_agent_present_in_request():
+    """Every request must carry a User-Agent header."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_client_instance = MagicMock()
+    mock_client_instance.post.return_value = mock_response
+
+    with mock_patch("httpx.Client") as mock_httpx_client:
+        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+        _post_with_retry("http://localhost:4000", _SAMPLE_EVENT)
+
+    headers = mock_client_instance.post.call_args[1]["headers"]
+    assert "User-Agent" in headers
+
+
+def test_user_agent_format():
+    """User-Agent must match 'argus-sdk/{version} python/{major}.{minor}'."""
+    import re
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_client_instance = MagicMock()
+    mock_client_instance.post.return_value = mock_response
+
+    with mock_patch("httpx.Client") as mock_httpx_client:
+        mock_httpx_client.return_value.__enter__.return_value = mock_client_instance
+        _post_with_retry("http://localhost:4000", _SAMPLE_EVENT)
+
+    ua = mock_client_instance.post.call_args[1]["headers"]["User-Agent"]
+    assert re.match(r"argus-sdk/[\d.]+ python/\d+\.\d+", ua), f"Bad User-Agent: {ua!r}"

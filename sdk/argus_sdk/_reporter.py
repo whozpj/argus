@@ -1,10 +1,18 @@
 import atexit
 import logging
 import queue
+import sys
 import threading
 import time
+from importlib.metadata import version as _pkg_version
 
 logger = logging.getLogger("argus_sdk")
+
+try:
+    _SDK_VERSION = _pkg_version("argus-sdk")
+except Exception:
+    _SDK_VERSION = "unknown"
+_USER_AGENT = f"argus-sdk/{_SDK_VERSION} python/{sys.version_info.major}.{sys.version_info.minor}"
 
 _SENTINEL = object()
 _SHUTDOWN_TIMEOUT = 5.0
@@ -23,7 +31,7 @@ def _post_with_retry(endpoint: str, event: dict, api_key: str | None = None) -> 
         return
 
     url = f"{endpoint}/api/v1/events"
-    headers = {}
+    headers = {"User-Agent": _USER_AGENT}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 

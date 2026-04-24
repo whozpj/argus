@@ -5,7 +5,7 @@ from typing import Any
 from ._reporter import flush as flush  # noqa: F401 — re-exported for public API
 
 
-def patch(endpoint: str = "http://localhost:4000", client: Any = None, api_key: str | None = None) -> None:
+def patch(endpoint: str = "https://argus-sdk.com", client: Any = None, api_key: str | None = None) -> None:
     """Instrument LLM clients to send signal events to the Argus server.
 
     Usage (auto — instruments all future clients):

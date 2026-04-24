@@ -85,7 +85,7 @@ def projects() -> None:
 
 
 @cli.command()
-@click.option("--server", default="http://localhost:4000", help="Argus server URL")
+@click.option("--server", default="https://argus-sdk.com", help="Argus server URL")
 def login(server: str) -> None:
     """Log in via GitHub OAuth and save credentials locally."""
     _do_login(server)
