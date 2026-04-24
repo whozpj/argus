@@ -113,7 +113,11 @@ export default function Shell({ children }: { children: ReactNode }) {
   if (authError) return null;
   if (!me) return <ShellSkeleton />;
 
-  const selectedProject = me.projects.find((p) => p.id === currentProjectID) ?? null;
+  // Default to first project on dashboard when URL has no ?project= yet
+  // (avoids a two-render race where DashboardInner mounts before router.replace fires)
+  const selectedProject =
+    me.projects.find((p) => p.id === currentProjectID) ??
+    (pathname === "/dashboard" && me.projects.length > 0 ? me.projects[0] : null);
 
   const handleProjectChange = (id: string | null) => {
     if (!id) return;
