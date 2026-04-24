@@ -113,7 +113,7 @@ async function waitForDashboard(page: import("@playwright/test").Page) {
 
 test.describe("Dashboard — unauthenticated", () => {
   test("redirects to /login when no token in localStorage", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.waitForURL("/login", { timeout: 6000 });
     await expect(page).toHaveURL("/login");
   });
@@ -125,7 +125,7 @@ test.describe("Dashboard — authenticated, no data", () => {
   test.beforeEach(async ({ page }) => {
     await setToken(page);
     await mockAPIs(page, { baselines: BASELINES_EMPTY });
-    await page.goto("/");
+    await page.goto("/dashboard");
     await waitForDashboard(page);
   });
 
@@ -165,7 +165,7 @@ test.describe("Dashboard — authenticated, with data", () => {
   test.beforeEach(async ({ page }) => {
     await setToken(page);
     await mockAPIs(page, { baselines: BASELINES_WITH_DATA });
-    await page.goto("/");
+    await page.goto("/dashboard");
     await waitForDashboard(page);
     // Ensure baselines table is rendered before assertions.
     await page.waitForSelector("tbody tr", { timeout: 6000 });
@@ -204,7 +204,7 @@ test.describe("Dashboard — drift active", () => {
   test.beforeEach(async ({ page }) => {
     await setToken(page);
     await mockAPIs(page, { baselines: BASELINES_WITH_DRIFT });
-    await page.goto("/");
+    await page.goto("/dashboard");
     await waitForDashboard(page);
     await page.waitForSelector("[data-testid='drift-alert']", { timeout: 6000 });
   });
@@ -235,7 +235,7 @@ test.describe("Dashboard — sign out", () => {
   test("clears token and redirects to /login on sign-out", async ({ page }) => {
     await setToken(page);
     await mockAPIs(page);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await waitForDashboard(page);
 
     // Open the user dropdown first, then click sign out.
@@ -271,7 +271,7 @@ test.describe("Dashboard — refresh button", () => {
       });
     });
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await waitForDashboard(page);
     await page.getByText("No events yet").waitFor({ timeout: 6000 });
     const beforeCount = callCount;

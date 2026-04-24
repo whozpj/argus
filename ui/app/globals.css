@@ -24,6 +24,20 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+
+    /* Argus GCP palette — used by Shell, dashboard, landing */
+    --argus-topbar: #202124;
+    --argus-page-bg: #f1f3f4;
+    --argus-sidebar-bg: #ffffff;
+    --argus-sidebar-border: #e0e0e0;
+    --argus-nav-active-bg: #e8f0fe;
+    --argus-nav-active-fg: #1a73e8;
+    --argus-blue: #1a73e8;
+    --argus-text: #202124;
+    --argus-text-secondary: #5f6368;
+    --argus-amber: #f59e0b;
+    --argus-amber-bg: #fef3c7;
+    --argus-green: #34a853;
   }
 
   .dark {

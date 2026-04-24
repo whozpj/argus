@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { Zap } from "lucide-react";
 
 export const metadata = { title: "Sign in — Argus" };
 
@@ -6,29 +6,23 @@ export default function LoginPage() {
   const server = process.env.NEXT_PUBLIC_ARGUS_SERVER ?? "http://localhost:4000";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-      {/* Card */}
-      <div className="w-full max-w-sm rounded-2xl border bg-card shadow-sm p-8 space-y-8">
-
-        {/* Brand */}
+    <div className="min-h-screen bg-[#f1f3f4] flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-lg border border-[#e0e0e0] bg-white shadow-sm p-8 space-y-8">
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground">
-            <Activity className="h-6 w-6" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-md bg-[#1a73e8] text-white">
+            <Zap className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Sign in to Argus</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              LLM behavioral drift detection
-            </p>
+            <h1 className="text-xl font-semibold tracking-tight text-[#202124]">Sign in to Argus</h1>
+            <p className="mt-1 text-sm text-[#5f6368]">LLM behavioral drift detection</p>
           </div>
         </div>
 
-        {/* OAuth buttons */}
         <div className="space-y-3">
           <a
             href={`${server}/auth/github`}
             data-testid="github-login"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex w-full items-center justify-center gap-3 h-10 rounded-md border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] transition-colors hover:bg-[#f1f3f4]"
           >
             <GitHubIcon className="h-4 w-4 shrink-0" />
             Continue with GitHub
@@ -36,17 +30,15 @@ export default function LoginPage() {
           <a
             href={`${server}/auth/google`}
             data-testid="google-login"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex w-full items-center justify-center gap-3 h-10 rounded-md border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] transition-colors hover:bg-[#f1f3f4]"
           >
             <GoogleIcon className="h-4 w-4 shrink-0" />
             Continue with Google
           </a>
         </div>
 
-        {/* Footer note */}
-        <p className="text-center text-xs text-muted-foreground">
-          Your prompt text is never collected.{" "}
-          <span className="font-medium text-foreground">Signals only.</span>
+        <p className="text-center text-xs text-[#5f6368]">
+          Your prompt text is never collected. <span className="font-medium text-[#202124]">Signals only.</span>
         </p>
       </div>
     </div>

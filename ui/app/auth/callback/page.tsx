@@ -30,7 +30,7 @@ function CallbackInner() {
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: { token: string }) => {
         localStorage.setItem("argus_token", data.token);
-        router.replace("/");
+        router.replace("/dashboard");
       })
       .catch(() => {
         router.replace("/login");

@@ -160,7 +160,7 @@ test("dashboard header shows display_name when set", async ({ page }) => {
     });
   });
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await page.waitForSelector("[data-testid='user-email']", { timeout: 8000 });
   await expect(page.getByTestId("user-email")).toContainText("Alice");
 });
@@ -183,7 +183,7 @@ test("dashboard header falls back to email when display_name is null", async ({ 
     });
   });
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await page.waitForSelector("[data-testid='user-email']", { timeout: 8000 });
   await expect(page.getByTestId("user-email")).toContainText("alice@example.com");
 });
