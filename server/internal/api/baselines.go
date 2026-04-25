@@ -87,6 +87,28 @@ func NewBaselinesHandler(db *store.DB) http.HandlerFunc {
 	}
 }
 
+// NewDeleteModelHandler returns a handler for DELETE /api/v1/baselines/{model}.
+func NewDeleteModelHandler(db *store.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID, ok := auth.ProjectIDFromContext(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		model := r.PathValue("model")
+		if model == "" {
+			http.Error(w, "model required", http.StatusBadRequest)
+			return
+		}
+		if err := db.DeleteModel(projectID, model); err != nil {
+			slog.Error("api: delete model", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func round2(f float64) float64 {
 	return float64(int(f*100+0.5)) / 100
 }

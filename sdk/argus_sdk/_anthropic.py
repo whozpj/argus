@@ -5,12 +5,17 @@ import time
 from ._reporter import report
 
 
+def _model_key(model: str, name: str | None) -> str:
+    return f"{model}:{name}" if name else model
+
+
 class _SyncAnthropicStreamWrapper:
-    def __init__(self, stream, t0, endpoint, api_key):
+    def __init__(self, stream, t0, endpoint, api_key, name):
         self._stream = stream
         self._t0 = t0
         self._endpoint = endpoint
         self._api_key = api_key
+        self._name = name
         self._captured = {}
 
     def __iter__(self):
@@ -23,8 +28,10 @@ class _SyncAnthropicStreamWrapper:
                 self._captured["finish_reason"] = event.delta.stop_reason or ""
             yield event
         latency_ms = int((time.monotonic() - self._t0) * 1000)
+        captured = dict(self._captured)
+        captured["model"] = _model_key(captured.get("model", ""), self._name)
         report(self._endpoint, {
-            **self._captured,
+            **captured,
             "provider": "anthropic",
             "latency_ms": latency_ms,
             "timestamp_utc": _now(),
@@ -35,11 +42,12 @@ class _SyncAnthropicStreamWrapper:
 
 
 class _AsyncAnthropicStreamWrapper:
-    def __init__(self, stream, t0, endpoint, api_key):
+    def __init__(self, stream, t0, endpoint, api_key, name):
         self._stream = stream
         self._t0 = t0
         self._endpoint = endpoint
         self._api_key = api_key
+        self._name = name
         self._captured = {}
 
     async def __aiter__(self):
@@ -52,8 +60,10 @@ class _AsyncAnthropicStreamWrapper:
                 self._captured["finish_reason"] = event.delta.stop_reason or ""
             yield event
         latency_ms = int((time.monotonic() - self._t0) * 1000)
+        captured = dict(self._captured)
+        captured["model"] = _model_key(captured.get("model", ""), self._name)
         report(self._endpoint, {
-            **self._captured,
+            **captured,
             "provider": "anthropic",
             "latency_ms": latency_ms,
             "timestamp_utc": _now(),
@@ -63,7 +73,7 @@ class _AsyncAnthropicStreamWrapper:
         return getattr(self._stream, name)
 
 
-def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
+def patch(client: object, endpoint: str, api_key: str | None = None, name: str | None = None) -> None:
     """Wrap client.messages.create to capture signals after each response."""
     messages = client.messages  # type: ignore[attr-defined]
     original_create = messages.create
@@ -73,12 +83,12 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if kwargs.get("stream"):
                 t0 = time.monotonic()
                 stream = await original_create(*args, **kwargs)
-                return _AsyncAnthropicStreamWrapper(stream, t0, endpoint, api_key)
+                return _AsyncAnthropicStreamWrapper(stream, t0, endpoint, api_key, name)
             t0 = time.monotonic()
             response = await original_create(*args, **kwargs)
             latency_ms = int((time.monotonic() - t0) * 1000)
             report(endpoint, {
-                "model": response.model,
+                "model": _model_key(response.model, name),
                 "provider": "anthropic",
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,
@@ -92,12 +102,12 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if kwargs.get("stream"):
                 t0 = time.monotonic()
                 stream = original_create(*args, **kwargs)
-                return _SyncAnthropicStreamWrapper(stream, t0, endpoint, api_key)
+                return _SyncAnthropicStreamWrapper(stream, t0, endpoint, api_key, name)
             t0 = time.monotonic()
             response = original_create(*args, **kwargs)
             latency_ms = int((time.monotonic() - t0) * 1000)
             report(endpoint, {
-                "model": response.model,
+                "model": _model_key(response.model, name),
                 "provider": "anthropic",
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,

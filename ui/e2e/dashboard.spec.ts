@@ -146,16 +146,16 @@ test.describe("Dashboard — authenticated, no data", () => {
     await expect(page.getByTestId("sign-out")).toBeVisible({ timeout: 3000 });
   });
 
-  test("shows empty state when no events", async ({ page }) => {
-    // Wait for loading skeleton to disappear.
-    await expect(page.getByText("No events yet")).toBeVisible({ timeout: 6000 });
+  test("shows onboarding screen when no events", async ({ page }) => {
+    await expect(page.getByText("Get started with Argus")).toBeVisible({ timeout: 6000 });
+    await expect(page.getByText("Install the SDK")).toBeVisible();
+    await expect(page.getByRole("button", { name: /check for events/i })).toBeVisible();
   });
 
-  test("shows summary cards", async ({ page }) => {
-    // Wait past skeleton.
-    await expect(page.getByText("No events yet")).toBeVisible({ timeout: 6000 });
-    await expect(page.getByText("Total Events")).toBeVisible();
-    await expect(page.getByText("Models").first()).toBeVisible();
+  test("shows onboarding steps when no events", async ({ page }) => {
+    await expect(page.getByText("Get started with Argus")).toBeVisible({ timeout: 6000 });
+    await expect(page.getByText("Add one line before your LLM client")).toBeVisible();
+    await expect(page.getByText("Get an API key")).toBeVisible();
   });
 });
 
@@ -273,7 +273,7 @@ test.describe("Dashboard — refresh button", () => {
 
     await page.goto("/dashboard");
     await waitForDashboard(page);
-    await page.getByText("No events yet").waitFor({ timeout: 6000 });
+    await page.getByText("Get started with Argus").waitFor({ timeout: 6000 });
     const beforeCount = callCount;
 
     await page.getByRole("button", { name: "Refresh" }).click();

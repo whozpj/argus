@@ -297,8 +297,8 @@ def test_class_level_patched_only_once():
             self.messages = MagicMock()
             self.messages.create.return_value = _anthropic_response()
 
-    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None)
-    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None)  # second call
+    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None, name=None)
+    _wrap_class_init(FakeClient, "http://localhost:4000", provider="anthropic", api_key=None, name=None)  # second call
 
     assert FakeClient._argus_patched is True
 
@@ -428,7 +428,7 @@ def test_anthropic_sync_streaming_yields_events():
     stream = MagicMock()
     stream.__iter__ = MagicMock(return_value=iter(events))
 
-    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._anthropic.report"):
         yielded = list(wrapper)
@@ -444,7 +444,7 @@ def test_anthropic_sync_streaming_reports_after_exhaustion():
     stream = MagicMock()
     stream.__iter__ = MagicMock(return_value=iter(events))
 
-    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+    wrapper = _SyncAnthropicStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         list(wrapper)
@@ -489,7 +489,7 @@ async def test_async_anthropic_streaming_yields_events():
             for e in events:
                 yield e
 
-    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._anthropic.report"):
         yielded = [e async for e in wrapper]
@@ -509,7 +509,7 @@ async def test_async_anthropic_streaming_reports_after_exhaustion():
             for e in events:
                 yield e
 
-    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+    wrapper = _AsyncAnthropicStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._anthropic.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         async for _ in wrapper:
@@ -551,7 +551,7 @@ def test_openai_sync_streaming_yields_chunks():
     stream = MagicMock()
     stream.__iter__ = MagicMock(return_value=iter(chunks))
 
-    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._openai.report"):
         yielded = list(wrapper)
@@ -567,7 +567,7 @@ def test_openai_sync_streaming_reports_after_exhaustion():
     stream = MagicMock()
     stream.__iter__ = MagicMock(return_value=iter(chunks))
 
-    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None)
+    wrapper = _SyncOpenAIStreamWrapper(stream, time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         list(wrapper)
@@ -617,7 +617,7 @@ async def test_async_openai_streaming_reports_after_exhaustion():
             for c in chunks:
                 yield c
 
-    wrapper = _AsyncOpenAIStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None)
+    wrapper = _AsyncOpenAIStreamWrapper(FakeAsyncStream(), time.monotonic(), "http://localhost:4000", None, None)
 
     with mock_patch("argus_sdk._openai.report", side_effect=lambda ep, ev, api_key=None: posted.append(ev)):
         async for _ in wrapper:

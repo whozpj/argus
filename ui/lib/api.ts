@@ -47,6 +47,19 @@ export async function updateDisplayName(displayName: string): Promise<MeResponse
   return res.json();
 }
 
+export async function deleteModel(model: string, projectID?: string): Promise<void> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const url = projectID
+    ? `${SERVER}/api/v1/baselines/${encodeURIComponent(model)}?project_id=${encodeURIComponent(projectID)}`
+    : `${SERVER}/api/v1/baselines/${encodeURIComponent(model)}`;
+
+  const res = await fetch(url, { method: "DELETE", headers });
+  if (!res.ok) throw new Error(`DELETE /api/v1/baselines: ${res.status}`);
+}
+
 export async function fetchBaselines(projectID?: string): Promise<BaselinesResponse> {
   const token = getToken();
   const headers: Record<string, string> = {};

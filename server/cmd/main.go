@@ -53,6 +53,7 @@ func main() {
 
 	// Baselines — optional API key; resolves projectID, falls back to "self-hosted".
 	mux.Handle("GET /api/v1/baselines", auth.ResolveProject(db)(http.HandlerFunc(api.NewBaselinesHandler(db))))
+	mux.Handle("DELETE /api/v1/baselines/{model}", auth.ResolveProject(db)(api.NewDeleteModelHandler(db)))
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

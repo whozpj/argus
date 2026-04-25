@@ -60,6 +60,21 @@ func (d *DB) RecentSample(projectID, model string, n int) ([]Event, error) {
 	return events, nil
 }
 
+// DeleteModel removes all events, the baseline, and the drift state for one
+// model within a project.
+func (d *DB) DeleteModel(projectID, model string) error {
+	for _, q := range []string{
+		`DELETE FROM events      WHERE project_id = $1 AND model = $2`,
+		`DELETE FROM baselines   WHERE project_id = $1 AND model = $2`,
+		`DELETE FROM drift_state WHERE project_id = $1 AND model = $2`,
+	} {
+		if _, err := d.sql.Exec(q, projectID, model); err != nil {
+			return fmt.Errorf("delete model %q: %w", model, err)
+		}
+	}
+	return nil
+}
+
 func scanEvents(rows interface {
 	Next() bool
 	Scan(...any) error

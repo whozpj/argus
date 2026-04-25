@@ -12,11 +12,12 @@ def _inject_stream_options(kwargs: dict) -> dict:
 
 
 class _SyncOpenAIStreamWrapper:
-    def __init__(self, stream, t0, endpoint, api_key):
+    def __init__(self, stream, t0, endpoint, api_key, name):
         self._stream = stream
         self._t0 = t0
         self._endpoint = endpoint
         self._api_key = api_key
+        self._name = name
         self._captured = {"model": "", "input_tokens": 0, "output_tokens": 0, "finish_reason": ""}
 
     def __iter__(self):
@@ -30,8 +31,10 @@ class _SyncOpenAIStreamWrapper:
                 self._captured["output_tokens"] = chunk.usage.completion_tokens
             yield chunk
         latency_ms = int((time.monotonic() - self._t0) * 1000)
+        captured = dict(self._captured)
+        captured["model"] = _model_key(captured["model"], self._name)
         report(self._endpoint, {
-            **self._captured,
+            **captured,
             "provider": "openai",
             "latency_ms": latency_ms,
             "timestamp_utc": _now(),
@@ -42,11 +45,12 @@ class _SyncOpenAIStreamWrapper:
 
 
 class _AsyncOpenAIStreamWrapper:
-    def __init__(self, stream, t0, endpoint, api_key):
+    def __init__(self, stream, t0, endpoint, api_key, name):
         self._stream = stream
         self._t0 = t0
         self._endpoint = endpoint
         self._api_key = api_key
+        self._name = name
         self._captured = {"model": "", "input_tokens": 0, "output_tokens": 0, "finish_reason": ""}
 
     async def __aiter__(self):
@@ -60,8 +64,10 @@ class _AsyncOpenAIStreamWrapper:
                 self._captured["output_tokens"] = chunk.usage.completion_tokens
             yield chunk
         latency_ms = int((time.monotonic() - self._t0) * 1000)
+        captured = dict(self._captured)
+        captured["model"] = _model_key(captured["model"], self._name)
         report(self._endpoint, {
-            **self._captured,
+            **captured,
             "provider": "openai",
             "latency_ms": latency_ms,
             "timestamp_utc": _now(),
@@ -71,7 +77,11 @@ class _AsyncOpenAIStreamWrapper:
         return getattr(self._stream, name)
 
 
-def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
+def _model_key(model: str, name: str | None) -> str:
+    return f"{model}:{name}" if name else model
+
+
+def patch(client: object, endpoint: str, api_key: str | None = None, name: str | None = None) -> None:
     """Wrap client.chat.completions.create to capture signals after each response."""
     completions = client.chat.completions  # type: ignore[attr-defined]
     original_create = completions.create
@@ -81,7 +91,7 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if kwargs.get("stream"):
                 t0 = time.monotonic()
                 stream = await original_create(*args, **_inject_stream_options(kwargs))
-                return _AsyncOpenAIStreamWrapper(stream, t0, endpoint, api_key)
+                return _AsyncOpenAIStreamWrapper(stream, t0, endpoint, api_key, name)
             t0 = time.monotonic()
             response = await original_create(*args, **kwargs)
             latency_ms = int((time.monotonic() - t0) * 1000)
@@ -89,7 +99,7 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if response.choices:
                 finish_reason = response.choices[0].finish_reason or ""
             report(endpoint, {
-                "model": response.model,
+                "model": _model_key(response.model, name),
                 "provider": "openai",
                 "input_tokens": response.usage.prompt_tokens if response.usage else 0,
                 "output_tokens": response.usage.completion_tokens if response.usage else 0,
@@ -103,7 +113,7 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if kwargs.get("stream"):
                 t0 = time.monotonic()
                 stream = original_create(*args, **_inject_stream_options(kwargs))
-                return _SyncOpenAIStreamWrapper(stream, t0, endpoint, api_key)
+                return _SyncOpenAIStreamWrapper(stream, t0, endpoint, api_key, name)
             t0 = time.monotonic()
             response = original_create(*args, **kwargs)
             latency_ms = int((time.monotonic() - t0) * 1000)
@@ -111,7 +121,7 @@ def patch(client: object, endpoint: str, api_key: str | None = None) -> None:
             if response.choices:
                 finish_reason = response.choices[0].finish_reason or ""
             report(endpoint, {
-                "model": response.model,
+                "model": _model_key(response.model, name),
                 "provider": "openai",
                 "input_tokens": response.usage.prompt_tokens if response.usage else 0,
                 "output_tokens": response.usage.completion_tokens if response.usage else 0,

@@ -9,11 +9,12 @@ import {
   Database,
   RefreshCw,
   Terminal,
+  Trash2,
   Zap,
 } from "lucide-react";
 
 import Shell, { useShell } from "@/components/Shell";
-import { fetchBaselines } from "@/lib/api";
+import { fetchBaselines, deleteModel } from "@/lib/api";
 import type { BaselineModel, BaselinesResponse } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -110,14 +111,14 @@ function DashboardInner() {
                 <SummaryCards data={data} alertedCount={alertedModels.length} />
                 {alertedModels.length > 0 && <DriftBanner models={alertedModels} />}
                 {alertedModels.length === 0 && data.baselines.some((b) => b.drift_score > 0) && <AllClear />}
-                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
+                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} projectID={projectID} onDelete={() => loadBaselines(true)} />
               </>
             )}
             {/* Models: cards + table only */}
             {tab === "models" && (
               <>
                 <SummaryCards data={data} alertedCount={alertedModels.length} />
-                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} />
+                <ModelsCard baselines={data.baselines} projectName={selectedProject?.name} projectID={projectID} onDelete={() => loadBaselines(true)} />
               </>
             )}
             {/* Alerts: banner + table filtered to drift-alerted rows */}
@@ -126,7 +127,7 @@ function DashboardInner() {
                 {alertedModels.length > 0 ? (
                   <>
                     <DriftBanner models={alertedModels} />
-                    <ModelsCard baselines={alertedModels} projectName={selectedProject?.name} />
+                    <ModelsCard baselines={alertedModels} projectName={selectedProject?.name} projectID={projectID} onDelete={() => loadBaselines(true)} />
                   </>
                 ) : (
                   <AllClear />
@@ -211,20 +212,35 @@ function AllClear() {
   );
 }
 
-function ModelsCard({ baselines, projectName }: { baselines: BaselineModel[]; projectName?: string }) {
+function ModelsCard({ baselines, projectName, projectID, onDelete }: { baselines: BaselineModel[]; projectName?: string; projectID?: string; onDelete?: () => void }) {
   return (
     <Card className="bg-white border-[#dadce0]">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-[#202124]">Models</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {baselines.length === 0 ? <EmptyState projectName={projectName} /> : <BaselineTable baselines={baselines} />}
+        {baselines.length === 0 ? <EmptyState projectName={projectName} /> : <BaselineTable baselines={baselines} projectID={projectID} onDelete={onDelete} />}
       </CardContent>
     </Card>
   );
 }
 
-function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
+function BaselineTable({ baselines, projectID, onDelete }: { baselines: BaselineModel[]; projectID?: string; onDelete?: () => void }) {
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = async (model: string) => {
+    if (!confirm(`Delete all data for "${model}"? This cannot be undone.`)) return;
+    setDeleting(model);
+    try {
+      await deleteModel(model, projectID || undefined);
+      onDelete?.();
+    } catch (e) {
+      alert(`Failed to delete: ${(e as Error).message}`);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <Table>
       <TableHeader>
@@ -235,7 +251,8 @@ function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
           <TableHead className="text-right hidden sm:table-cell">Avg Latency</TableHead>
           <TableHead className="text-center hidden md:table-cell">Baseline</TableHead>
           <TableHead className="text-center">Drift</TableHead>
-          <TableHead className="text-center pr-6">Status</TableHead>
+          <TableHead className="text-center">Status</TableHead>
+          <TableHead className="pr-6 w-8" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -265,8 +282,18 @@ function BaselineTable({ baselines }: { baselines: BaselineModel[] }) {
                 <span className="text-xs text-[#5f6368]">—</span>
               )}
             </TableCell>
-            <TableCell className="text-center pr-6">
+            <TableCell className="text-center">
               <StatusBadge b={b} />
+            </TableCell>
+            <TableCell className="pr-6 text-right">
+              <button
+                onClick={() => handleDelete(b.model)}
+                disabled={deleting === b.model}
+                className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-50 text-[#5f6368] hover:text-red-600 disabled:opacity-40 transition-colors"
+                title="Delete model"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </TableCell>
           </TableRow>
         ))}
