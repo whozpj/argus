@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import Shell, { useShell } from "@/components/Shell";
-import { fetchBaselines, deleteModel } from "@/lib/api";
+import { fetchBaselines, deleteModel, createKey } from "@/lib/api";
 import type { BaselineModel, BaselinesResponse } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -102,7 +102,7 @@ function DashboardInner() {
         <ErrorBanner message={fetchError} onRetry={() => loadBaselines()} />
       ) : data ? (
         data.total_events === 0 ? (
-          <Onboarding onRefresh={() => loadBaselines(true)} refreshing={refreshing} />
+          <Onboarding projectID={projectID} onRefresh={() => loadBaselines(true)} refreshing={refreshing} />
         ) : (
           <>
             {/* Overview: cards + banner + table */}
@@ -376,7 +376,32 @@ function OnboardingStep({ number, title, children }: { number: number; title: st
   );
 }
 
-function Onboarding({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+function Onboarding({ projectID, onRefresh, refreshing }: { projectID: string; onRefresh: () => void; refreshing: boolean }) {
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  const handleGenerateKey = async () => {
+    setGeneratingKey(true);
+    setKeyError(null);
+    try {
+      const result = await createKey(projectID, "default");
+      setApiKey(result.key);
+    } catch (e: unknown) {
+      setKeyError(e instanceof Error ? e.message : "Failed to create key");
+    } finally {
+      setGeneratingKey(false);
+    }
+  };
+
+  const copyKey = () => {
+    if (!apiKey) return;
+    navigator.clipboard.writeText(apiKey);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
+  };
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* Header */}
@@ -404,7 +429,7 @@ function Onboarding({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
 
         <OnboardingStep number={2} title="Add one line before your LLM client">
           <CodeSnippet code={`from argus_sdk import patch
-patch(api_key="argus_sk_...")   # get your key from the CLI: argus projects
+patch(api_key="${apiKey ?? "argus_sk_..."}")
 
 import anthropic
 client = anthropic.Anthropic()  # automatically instrumented`} />
@@ -416,10 +441,37 @@ client = anthropic.Anthropic()  # automatically instrumented`} />
         </OnboardingStep>
 
         <OnboardingStep number={3} title="Get an API key">
-          <p className="text-xs text-[#5f6368] mt-1">Log in and list your projects to find your key:</p>
-          <CodeSnippet code={`pip install argus-sdk
-argus login     # opens browser — sign in with GitHub or Google
-argus projects  # shows your project IDs and key prefixes`} />
+          {apiKey ? (
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-[#f8f9fa] border border-[#e8eaed] rounded px-3 py-2 truncate text-[#202124]">
+                  {apiKey}
+                </code>
+                <button
+                  onClick={copyKey}
+                  className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 border border-[#dadce0] rounded text-xs text-[#5f6368] hover:bg-[#f1f3f4] transition-colors"
+                >
+                  <Copy className="h-3 w-3" />
+                  {keyCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <div className="flex items-start gap-1.5 text-xs text-[#b45309] bg-[#fffbeb] border border-[#fde68a] rounded px-3 py-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                Save this key — it won&apos;t be shown again.
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <button
+                onClick={handleGenerateKey}
+                disabled={generatingKey}
+                className="inline-flex items-center gap-2 h-8 px-4 bg-[#1a73e8] text-white text-xs rounded hover:bg-[#1557b0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {generatingKey ? "Generating…" : "Generate API key"}
+              </button>
+              {keyError && <p className="text-xs text-red-600">{keyError}</p>}
+            </div>
+          )}
         </OnboardingStep>
 
         <OnboardingStep number={4} title="Make LLM calls — Argus does the rest">

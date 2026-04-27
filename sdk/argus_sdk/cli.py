@@ -12,16 +12,18 @@ def cli() -> None:
 
 
 @cli.command()
-def status() -> None:
+@click.option("--server", default=None, help="Argus server URL (overrides saved credentials)")
+def status(server: str | None) -> None:
     """Show the current logged-in user and their projects."""
     creds = load()
     if not creds:
         click.echo("Not logged in. Run: argus login")
         return
+    base = (server or creds["server"]).rstrip("/")
 
     try:
         resp = httpx.get(
-            f"{creds['server']}/api/v1/me",
+            f"{base}/api/v1/me",
             headers={"Authorization": f"Bearer {creds['token']}"},
             timeout=5.0,
         )
@@ -38,7 +40,7 @@ def status() -> None:
 
     data = resp.json()
     click.echo(f"Logged in as: {data['email']}")
-    click.echo(f"Server:       {creds['server']}")
+    click.echo(f"Server:       {base}")
     projects = data.get("projects", [])
     if projects:
         click.echo(f"\nProjects ({len(projects)}):")
@@ -49,16 +51,18 @@ def status() -> None:
 
 
 @cli.command()
-def projects() -> None:
+@click.option("--server", default=None, help="Argus server URL (overrides saved credentials)")
+def projects(server: str | None) -> None:
     """List your projects."""
     creds = load()
     if not creds:
         click.echo("Not logged in. Run: argus login")
         return
+    base = (server or creds["server"]).rstrip("/")
 
     try:
         resp = httpx.get(
-            f"{creds['server']}/api/v1/projects",
+            f"{base}/api/v1/projects",
             headers={"Authorization": f"Bearer {creds['token']}"},
             timeout=5.0,
         )

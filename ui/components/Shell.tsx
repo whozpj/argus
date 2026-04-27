@@ -2,9 +2,9 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { LogOut, Settings as SettingsIcon, Zap, LayoutDashboard, Activity, Bell, BookOpen } from "lucide-react";
+import { LogOut, Settings as SettingsIcon, Zap, LayoutDashboard, Activity, Bell, BookOpen, Plus } from "lucide-react";
 
-import { fetchMe, logout } from "@/lib/api";
+import { fetchMe, logout, createProject } from "@/lib/api";
 import { DOCS_PAGES } from "@/lib/docs";
 import type { MeResponse, Project } from "@/lib/types";
 import {
@@ -89,6 +89,10 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const [me, setMe] = useState<MeResponse | null>(null);
   const [authError, setAuthError] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Preserve the project param across navigation — e.g. when switching tabs.
   const currentProjectID = params.get("project") ?? "";
@@ -131,6 +135,27 @@ export default function Shell({ children }: { children: ReactNode }) {
     router.replace("/login");
   };
 
+  const handleCreateProject = async () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const proj = await createProject(name);
+      const updated = await fetchMe();
+      setMe(updated);
+      setShowNewProject(false);
+      setNewProjectName("");
+      const url = new URL(window.location.href);
+      url.searchParams.set("project", proj.id);
+      router.push("/dashboard?" + url.searchParams.toString());
+    } catch (e: unknown) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <ShellContext.Provider value={{ me, selectedProject }}>
       <div className="min-h-screen bg-[#f1f3f4]">
@@ -163,6 +188,15 @@ export default function Shell({ children }: { children: ReactNode }) {
               </SelectContent>
             </Select>
           )}
+
+          <button
+            data-testid="new-project-btn"
+            onClick={() => { setShowNewProject(true); setCreateError(null); setNewProjectName(""); }}
+            className="flex items-center gap-1.5 h-8 px-3 text-sm border border-[#5f6368] text-[#8ab4f8] rounded hover:bg-[#3c4043] transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New project
+          </button>
 
           <div className="ml-auto flex items-center gap-3">
             <DropdownMenu>
@@ -243,6 +277,45 @@ export default function Shell({ children }: { children: ReactNode }) {
           <div className="p-6">{children}</div>
         </main>
       </div>
+
+      {/* New project modal */}
+      {showNewProject && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowNewProject(false); }}
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+            <h2 className="text-base font-semibold text-[#202124] mb-4">New project</h2>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Project name"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateProject(); if (e.key === "Escape") setShowNewProject(false); }}
+              className="w-full border border-[#dadce0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-none focus:border-[#1a73e8] mb-3"
+            />
+            {createError && (
+              <p className="text-xs text-red-600 mb-3">{createError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowNewProject(false)}
+                className="px-4 py-2 text-sm text-[#5f6368] hover:bg-[#f1f3f4] rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateProject}
+                disabled={!newProjectName.trim() || creating}
+                className="px-4 py-2 text-sm bg-[#1a73e8] text-white rounded hover:bg-[#1557b0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {creating ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ShellContext.Provider>
   );
 }

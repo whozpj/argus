@@ -1,4 +1,4 @@
-import type { BaselinesResponse, MeResponse } from "./types";
+import type { BaselinesResponse, MeResponse, Project } from "./types";
 
 const SERVER = process.env.NEXT_PUBLIC_ARGUS_SERVER ?? "http://localhost:4000";
 
@@ -58,6 +58,48 @@ export async function deleteModel(model: string, projectID?: string): Promise<vo
 
   const res = await fetch(url, { method: "DELETE", headers });
   if (!res.ok) throw new Error(`DELETE /api/v1/baselines: ${res.status}`);
+}
+
+export async function createProject(name: string): Promise<Project> {
+  const token = getToken();
+  if (!token) throw new Error("not authenticated");
+
+  const res = await fetch(`${SERVER}/api/v1/projects`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text.trim() || `POST /api/v1/projects: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createKey(projectID: string, name: string): Promise<{ key: string; prefix: string; name: string }> {
+  const token = getToken();
+  if (!token) throw new Error("not authenticated");
+
+  const res = await fetch(`${SERVER}/api/v1/projects/${encodeURIComponent(projectID)}/keys`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text.trim() || `POST /api/v1/projects/keys: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function fetchBaselines(projectID?: string): Promise<BaselinesResponse> {
