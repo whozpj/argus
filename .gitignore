@@ -47,3 +47,12 @@ CLAUDE.md
 # ── Reference docs (not source code) ─────────────────
 *.docx
 *.pdf
+
+# ── Local screenshots & scratch (never commit; assets live in docs/assets/) ──
+/*.png
+.playwright-mcp/
+.superpowers/
+**/test-results/
+
+# ── Personal notes (keep local, never publish) ───────
+docs/interview-prep.*
