@@ -1,7 +1,7 @@
 # Argus
 
 [![PyPI](https://img.shields.io/pypi/v/argus-sdk)](https://pypi.org/project/argus-sdk/)
-[![CI](https://github.com/whozpj/argus/actions/workflows/deploy.yml/badge.svg)](https://github.com/whozpj/argus/actions/workflows/deploy.yml)
+[![CI](https://github.com/whozpj/argus/actions/workflows/ci.yml/badge.svg)](https://github.com/whozpj/argus/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12+-3776ab)
 ![Go](https://img.shields.io/badge/go-1.26-00add8)
 ![Next.js](https://img.shields.io/badge/next.js-14-000000)
@@ -43,9 +43,10 @@ The parts of this project worth a closer look:
 - **Multi-tenant cloud.** GitHub/Google OAuth, JWT sessions, hashed API keys, and a project-scoped
   Postgres schema — the same codebase falls back to an unauthenticated single-tenant mode when
   self-hosted.
-- **Real infrastructure.** Ships to AWS via [Terraform](deploy/terraform/) (ECS Fargate, RDS,
-  ALB, Route 53, Secrets Manager, IAM) with a [GitHub Actions](.github/workflows/deploy.yml)
-  pipeline that runs the Go + Python test suites and deploys to ECS on every push to `main`.
+- **Real infrastructure.** The full AWS stack is defined as [Terraform](deploy/terraform/) —
+  ECS Fargate, RDS, ALB, Route 53, Secrets Manager, and IAM — and a
+  [GitHub Actions](.github/workflows/ci.yml) workflow runs the Go + Python test suites on every
+  push and pull request.
 
 ## Tech stack
 
@@ -239,7 +240,7 @@ deploy/
   Dockerfile  Single-image build: server + UI
   terraform/  AWS infra — ECS Fargate, RDS, ALB, Route 53, Secrets Manager, IAM
 .github/
-  workflows/  GitHub Actions — test, build, deploy to ECS on push to main
+  workflows/  GitHub Actions — Go + Python test suites on every push and PR
 examples/
   demo-app/   Simulator that drives the dashboard with no API keys required
 docs/         Cloud developer guide + dashboard screenshot
