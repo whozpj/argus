@@ -18,8 +18,13 @@ counts, latency, finish reason — and never sees your prompts or completions. I
 non-parametric drift test every 60 seconds and alerts Slack when a model starts behaving
 differently.
 
-Runs two ways: **[Argus Cloud](https://argus-sdk.com)** (managed, nothing to host) or
-**self-hosted** (one Docker container, no data leaves your machine).
+Runs two ways: **self-hosted** (one Docker container, no data leaves your machine) or
+**Argus Cloud** — a managed, multi-tenant platform with OAuth, API keys, and a hosted dashboard.
+
+> **Note:** The hosted Argus Cloud instance is currently disabled. The cloud platform is fully
+> built (auth, projects, API keys, dashboard — all in this repo) and deployable to AWS via
+> [Terraform](deploy/terraform/); it's just not running right now. **Self-hosting (below) is the
+> way to run Argus today.**
 
 ![The Argus dashboard — live drift detection across models, with baseline stats and Slack-backed alerts](docs/assets/argus-dashboard.png)
 
@@ -114,32 +119,7 @@ latency, finish reason).
 
 ## Quick start
 
-### Option A — Argus Cloud (nothing to host)
-
-Sign up at **[argus-sdk.com](https://argus-sdk.com)**, create a project, and grab an API key.
-
-```bash
-pip install argus-sdk
-```
-
-```python
-from argus_sdk import patch
-patch(endpoint="https://argus-sdk.com", api_key="argus_sk_...")
-
-import anthropic
-client = anthropic.Anthropic()
-client.messages.create(...)   # signals sent to Argus in the background
-```
-
-Manage everything from the CLI:
-
-```bash
-argus login      # authenticate via GitHub or Google OAuth
-argus status     # drift summary for all your projects
-argus projects   # list projects and API key prefixes
-```
-
-### Option B — Self-host (one Docker container)
+### Option A — Self-host (one Docker container) · **works today**
 
 ```bash
 # 1. Start Postgres
@@ -153,11 +133,19 @@ docker run -p 4000:4000 -p 3000:3000 \
   argus/argus
 ```
 
-Then point the SDK at your own container — omit the `api_key`:
+Install the SDK and point it at your own container — no API key needed:
+
+```bash
+pip install argus-sdk
+```
 
 ```python
 from argus_sdk import patch
 patch(endpoint="http://localhost:4000")
+
+import anthropic
+client = anthropic.Anthropic()
+client.messages.create(...)   # signals sent to Argus in the background
 ```
 
 Open [localhost:3000](http://localhost:3000) for the dashboard. Add `-e ARGUS_SLACK_WEBHOOK=...`
@@ -165,6 +153,24 @@ to the `docker run` command to enable Slack alerts.
 
 > Prefer to instrument a single client instead of all of them?
 > `patch(endpoint=..., client=my_client)` wraps just that instance.
+
+### Option B — Argus Cloud (managed) · **currently disabled**
+
+The hosted platform — GitHub/Google OAuth, multi-tenant projects, hashed API keys, a hosted
+dashboard, and a `argus` CLI — is fully implemented in this repo and deployable to AWS via
+[Terraform](deploy/terraform/). The managed instance isn't running right now; when it's live the
+flow is:
+
+```python
+from argus_sdk import patch
+patch(endpoint="https://argus-sdk.com", api_key="argus_sk_...")   # hosted endpoint
+```
+
+```bash
+argus login      # authenticate via GitHub or Google OAuth
+argus status     # drift summary for all your projects
+argus projects   # list projects and API key prefixes
+```
 
 ---
 
