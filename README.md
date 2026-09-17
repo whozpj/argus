@@ -242,7 +242,7 @@ deploy/
   workflows/  GitHub Actions — test, build, deploy to ECS on push to main
 examples/
   demo-app/   Simulator that drives the dashboard with no API keys required
-docs/         Developer & design docs
+docs/         Cloud developer guide + dashboard screenshot
 ```
 
 ## Development
