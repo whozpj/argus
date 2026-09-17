@@ -16,7 +16,7 @@ func (noopNotifier) Clear(string) error                           { return nil }
 
 // spyNotifier records calls for assertion in tests.
 type spyNotifier struct {
-	fired  []string // model names passed to Fire
+	fired   []string // model names passed to Fire
 	cleared []string // model names passed to Clear
 }
 
@@ -34,11 +34,18 @@ var _ alerts.Notifier = &spyNotifier{}
 
 // seedEvents inserts n events and updates the baseline for each, so that
 // after 200 calls the baseline is_ready flag flips automatically.
+// Events land in the "self-hosted" project.
 func seedEvents(t *testing.T, db *store.DB, model string, n, outputTokens, latencyMs int) {
+	t.Helper()
+	seedEventsFor(t, db, "self-hosted", model, n, outputTokens, latencyMs)
+}
+
+// seedEventsFor is seedEvents scoped to an arbitrary project.
+func seedEventsFor(t *testing.T, db *store.DB, projectID, model string, n, outputTokens, latencyMs int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		if err := db.InsertEvent(store.Event{
-			ProjectID:    "self-hosted",
+			ProjectID:    projectID,
 			Model:        model,
 			Provider:     "anthropic",
 			InputTokens:  50,
@@ -49,9 +56,34 @@ func seedEvents(t *testing.T, db *store.DB, model string, n, outputTokens, laten
 		}); err != nil {
 			t.Fatalf("InsertEvent: %v", err)
 		}
-		if err := db.UpdateBaseline("self-hosted", model, outputTokens, latencyMs); err != nil {
+		if err := db.UpdateBaseline(projectID, model, outputTokens, latencyMs); err != nil {
 			t.Fatalf("UpdateBaseline: %v", err)
 		}
+	}
+}
+
+// TestRunOnce_DetectsDriftAcrossProjects guards against the detector only ever
+// scoring the hardcoded "self-hosted" project. A drifting model in a cloud
+// (multi-tenant) project must be detected and persisted too.
+func TestRunOnce_DetectsDriftAcrossProjects(t *testing.T) {
+	db := newTestDB(t)
+	const cloud = "proj-cloud-123"
+	seedEventsFor(t, db, cloud, "claude-sonnet-4-6", 200, 50, 200) // baseline
+	seedEventsFor(t, db, cloud, "claude-sonnet-4-6", 50, 500, 200) // drift window
+
+	d := New(db, time.Hour, noopNotifier{})
+	d.RunOnce()
+
+	states, err := db.GetDriftStates(cloud)
+	if err != nil {
+		t.Fatalf("GetDriftStates: %v", err)
+	}
+	ds, ok := states["claude-sonnet-4-6"]
+	if !ok {
+		t.Fatal("detector wrote no drift_state for a non-self-hosted project")
+	}
+	if !ds.Alerted || ds.Score < alertThreshold {
+		t.Errorf("cloud project drift not detected: alerted=%v score=%v", ds.Alerted, ds.Score)
 	}
 }
 
@@ -65,7 +97,7 @@ func TestRunOnce_SkipsModelsWithTooFewRecentEvents(t *testing.T) {
 	seedEvents(t, db, "model-a", 5, 50, 200)   // only 5 recent — below minRecentN
 
 	d := New(db, time.Hour, noopNotifier{})
-	result := d.checkModel("model-a")
+	result := d.checkModel("self-hosted", "model-a")
 
 	if result.Score != 0 {
 		t.Errorf("score = %v, expected 0 (skipped due to insufficient recent data)", result.Score)
@@ -78,7 +110,7 @@ func TestRunOnce_NoDriftForIdenticalDistributions(t *testing.T) {
 	seedEvents(t, db, "gpt-4o", 250, 50, 200)
 
 	d := New(db, time.Hour, noopNotifier{})
-	result := d.checkModel("gpt-4o")
+	result := d.checkModel("self-hosted", "gpt-4o")
 
 	if result.Score > 0.3 {
 		t.Errorf("score = %v for identical distributions, expected < 0.3", result.Score)
@@ -95,7 +127,7 @@ func TestRunOnce_DriftDetectedForShiftedDistribution(t *testing.T) {
 	seedEvents(t, db, "claude-sonnet-4-6", 50, 500, 200)
 
 	d := New(db, time.Hour, noopNotifier{})
-	result := d.checkModel("claude-sonnet-4-6")
+	result := d.checkModel("self-hosted", "claude-sonnet-4-6")
 
 	if result.Score < 0.7 {
 		t.Errorf("score = %v, expected > 0.7 for a large distribution shift", result.Score)
@@ -110,7 +142,7 @@ func TestRunOnce_ScoreInRange(t *testing.T) {
 	seedEvents(t, db, "model-x", 250, 50, 200)
 
 	d := New(db, time.Hour, noopNotifier{})
-	result := d.checkModel("model-x")
+	result := d.checkModel("self-hosted", "model-x")
 
 	if result.Score < 0 || result.Score > 1 {
 		t.Errorf("score %v is outside [0, 1]", result.Score)
@@ -128,8 +160,8 @@ func TestHysteresis_AlertFiresOnce(t *testing.T) {
 
 	d := New(db, time.Hour, noopNotifier{})
 
-	r1 := d.checkModel("model-h")
-	r2 := d.checkModel("model-h") // second window — still drifted
+	r1 := d.checkModel("self-hosted", "model-h")
+	r2 := d.checkModel("self-hosted", "model-h") // second window — still drifted
 
 	if !r1.AlertFired {
 		t.Error("alert should fire on first detection")
@@ -146,7 +178,7 @@ func TestHysteresis_AlertClearsAfterThreeGoodWindows(t *testing.T) {
 	seedEvents(t, db, model, 50, 500, 200) // trigger drift
 
 	d := New(db, time.Hour, noopNotifier{})
-	d.checkModel(model) // fires alert
+	d.checkModel("self-hosted", model) // fires alert
 
 	// Now insert 50 more events matching the baseline distribution.
 	// The recent window will slide to contain only the "normal" events.
@@ -154,7 +186,7 @@ func TestHysteresis_AlertClearsAfterThreeGoodWindows(t *testing.T) {
 	// After 3 consecutive clear windows the alert should clear.
 	var cleared bool
 	for i := 0; i < 3; i++ {
-		r := d.checkModel(model)
+		r := d.checkModel("self-hosted", model)
 		if r.AlertCleared {
 			cleared = true
 		}
@@ -171,18 +203,18 @@ func TestHysteresis_ClearCountResetsIfDriftReturns(t *testing.T) {
 	seedEvents(t, db, model, 50, 500, 200) // trigger
 
 	d := New(db, time.Hour, noopNotifier{})
-	d.checkModel(model) // alerted
+	d.checkModel("self-hosted", model) // alerted
 
 	// One "good" window — partially into clearing.
 	seedEvents(t, db, model, 50, 50, 200)
-	d.checkModel(model)
+	d.checkModel("self-hosted", model)
 
-	state := d.states[model]
+	state := d.states[stateKey("self-hosted", model)]
 	clearCountAfterOneGoodWindow := state.clearCount
 
 	// Drift comes back — re-insert drifted events.
 	seedEvents(t, db, model, 50, 500, 200)
-	d.checkModel(model)
+	d.checkModel("self-hosted", model)
 
 	if state.clearCount >= clearCountAfterOneGoodWindow {
 		t.Error("clear count should reset when drift returns")
@@ -222,7 +254,7 @@ func TestNotifier_FireCalledOnAlert(t *testing.T) {
 
 	spy := &spyNotifier{}
 	d := New(db, time.Hour, spy)
-	d.checkModel("model-n")
+	d.checkModel("self-hosted", "model-n")
 
 	if len(spy.fired) != 1 || spy.fired[0] != "model-n" {
 		t.Errorf("Fire not called correctly: fired=%v", spy.fired)
@@ -235,7 +267,7 @@ func TestNotifier_FireNotCalledWhenNoDrift(t *testing.T) {
 
 	spy := &spyNotifier{}
 	d := New(db, time.Hour, spy)
-	d.checkModel("model-ok")
+	d.checkModel("self-hosted", "model-ok")
 
 	if len(spy.fired) != 0 {
 		t.Errorf("Fire should not be called when there is no drift: fired=%v", spy.fired)
@@ -250,11 +282,11 @@ func TestNotifier_ClearCalledAfterResolution(t *testing.T) {
 
 	spy := &spyNotifier{}
 	d := New(db, time.Hour, spy)
-	d.checkModel(model) // fires alert
+	d.checkModel("self-hosted", model) // fires alert
 
 	seedEvents(t, db, model, 50, 50, 200) // slide window back to normal
 	for i := 0; i < clearWindows; i++ {
-		d.checkModel(model)
+		d.checkModel("self-hosted", model)
 	}
 
 	if len(spy.cleared) != 1 || spy.cleared[0] != model {
@@ -269,12 +301,11 @@ func TestNotifier_FireCalledOnceNotRepeatedly(t *testing.T) {
 
 	spy := &spyNotifier{}
 	d := New(db, time.Hour, spy)
-	d.checkModel("model-once")
-	d.checkModel("model-once") // second window — still drifted
-	d.checkModel("model-once") // third
+	d.checkModel("self-hosted", "model-once")
+	d.checkModel("self-hosted", "model-once") // second window — still drifted
+	d.checkModel("self-hosted", "model-once") // third
 
 	if len(spy.fired) != 1 {
 		t.Errorf("Fire should be called exactly once, got %d calls", len(spy.fired))
 	}
 }
-

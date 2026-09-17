@@ -2,6 +2,27 @@ package store
 
 import "fmt"
 
+// ProjectIDsWithBaselines returns every distinct project_id that has at least
+// one baseline row. Used by the drift detector to scan all tenants, not just
+// the self-hosted fallback project.
+func (d *DB) ProjectIDsWithBaselines() ([]string, error) {
+	rows, err := d.sql.Query(`SELECT DISTINCT project_id FROM baselines`)
+	if err != nil {
+		return nil, fmt.Errorf("query project ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ReadyModels returns the model names within a project whose baseline is ready.
 func (d *DB) ReadyModels(projectID string) ([]string, error) {
 	rows, err := d.sql.Query(`SELECT model FROM baselines WHERE project_id = $1 AND is_ready = TRUE`, projectID)

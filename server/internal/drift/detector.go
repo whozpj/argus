@@ -12,7 +12,7 @@ const (
 	Interval       = 60 * time.Second
 	alertThreshold = 0.7
 	clearThreshold = 0.4
-	clearWindows   = 3  // consecutive windows below clearThreshold to clear alert
+	clearWindows   = 3 // consecutive windows below clearThreshold to clear alert
 	baselineN      = 200
 	recentN        = 50
 	minRecentN     = 10 // skip check if fewer recent events than this
@@ -51,40 +51,48 @@ func (d *Detector) Run() {
 	}
 }
 
-// RunOnce executes one detection pass across all ready models.
+// RunOnce executes one detection pass across every project's ready models.
 // Exported so tests can trigger it directly without waiting for the ticker.
 func (d *Detector) RunOnce() {
-	models, err := d.db.ReadyModels("self-hosted")
+	projectIDs, err := d.db.ProjectIDsWithBaselines()
 	if err != nil {
-		slog.Error("drift: list ready models", "err", err)
+		slog.Error("drift: list projects", "err", err)
 		return
 	}
-	for _, model := range models {
-		d.checkModel(model)
+	for _, projectID := range projectIDs {
+		models, err := d.db.ReadyModels(projectID)
+		if err != nil {
+			slog.Error("drift: list ready models", "project", projectID, "err", err)
+			continue
+		}
+		for _, model := range models {
+			d.checkModel(projectID, model)
+		}
 	}
 }
 
 // DriftResult holds the outcome of one detection window for a model.
 type DriftResult struct {
-	Model          string
-	Score          float64
-	POutputTokens  float64
-	PLatencyMs     float64
-	AlertFired     bool
-	AlertCleared   bool
+	Project       string
+	Model         string
+	Score         float64
+	POutputTokens float64
+	PLatencyMs    float64
+	AlertFired    bool
+	AlertCleared  bool
 }
 
-func (d *Detector) checkModel(model string) DriftResult {
-	result := DriftResult{Model: model}
+func (d *Detector) checkModel(projectID, model string) DriftResult {
+	result := DriftResult{Project: projectID, Model: model}
 
-	baseline, err := d.db.BaselineSample("self-hosted", model, baselineN)
+	baseline, err := d.db.BaselineSample(projectID, model, baselineN)
 	if err != nil {
-		slog.Error("drift: baseline sample", "model", model, "err", err)
+		slog.Error("drift: baseline sample", "project", projectID, "model", model, "err", err)
 		return result
 	}
-	recent, err := d.db.RecentSample("self-hosted", model, recentN)
+	recent, err := d.db.RecentSample(projectID, model, recentN)
 	if err != nil {
-		slog.Error("drift: recent sample", "model", model, "err", err)
+		slog.Error("drift: recent sample", "project", projectID, "model", model, "err", err)
 		return result
 	}
 	if len(recent) < minRecentN {
@@ -104,19 +112,19 @@ func (d *Detector) checkModel(model string) DriftResult {
 	result.POutputTokens = pOut
 	result.PLatencyMs = pLat
 
-	slog.Info("drift check", "model", model, "score", score,
+	slog.Info("drift check", "project", projectID, "model", model, "score", score,
 		"p_output_tokens", pOut, "p_latency_ms", pLat)
 
-	state := d.stateFor(model)
+	state := d.stateFor(projectID, model)
 
 	switch {
 	case !state.alerted && score > alertThreshold:
 		state.alerted = true
 		state.clearCount = 0
 		result.AlertFired = true
-		slog.Warn("DRIFT DETECTED", "model", model, "score", score)
+		slog.Warn("DRIFT DETECTED", "project", projectID, "model", model, "score", score)
 		if err := d.notifier.Fire(model, score, pOut, pLat); err != nil {
-			slog.Error("drift: send alert", "model", model, "err", err)
+			slog.Error("drift: send alert", "project", projectID, "model", model, "err", err)
 		}
 
 	case state.alerted && score < clearThreshold:
@@ -125,9 +133,9 @@ func (d *Detector) checkModel(model string) DriftResult {
 			state.alerted = false
 			state.clearCount = 0
 			result.AlertCleared = true
-			slog.Info("drift cleared", "model", model)
+			slog.Info("drift cleared", "project", projectID, "model", model)
 			if err := d.notifier.Clear(model); err != nil {
-				slog.Error("drift: send clear", "model", model, "err", err)
+				slog.Error("drift: send clear", "project", projectID, "model", model, "err", err)
 			}
 		}
 
@@ -137,24 +145,31 @@ func (d *Detector) checkModel(model string) DriftResult {
 	}
 
 	// Persist after hysteresis so Alerted reflects the current window's outcome.
-	if err := d.db.UpsertDriftState("self-hosted", store.DriftState{
+	if err := d.db.UpsertDriftState(projectID, store.DriftState{
 		Model:         model,
 		Score:         score,
 		POutputTokens: pOut,
 		PLatencyMs:    pLat,
 		Alerted:       state.alerted,
 	}); err != nil {
-		slog.Error("drift: persist state", "model", model, "err", err)
+		slog.Error("drift: persist state", "project", projectID, "model", model, "err", err)
 	}
 
 	return result
 }
 
-func (d *Detector) stateFor(model string) *modelState {
-	if _, ok := d.states[model]; !ok {
-		d.states[model] = &modelState{}
+// stateKey namespaces hysteresis state by project so the same model name in two
+// projects does not share (or clobber) alert state.
+func stateKey(projectID, model string) string {
+	return projectID + "\x00" + model
+}
+
+func (d *Detector) stateFor(projectID, model string) *modelState {
+	key := stateKey(projectID, model)
+	if _, ok := d.states[key]; !ok {
+		d.states[key] = &modelState{}
 	}
-	return d.states[model]
+	return d.states[key]
 }
 
 func floats(events []store.Event, f func(store.Event) float64) []float64 {
