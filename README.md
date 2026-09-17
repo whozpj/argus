@@ -21,7 +21,7 @@ differently.
 Runs two ways: **[Argus Cloud](https://argus-sdk.com)** (managed, nothing to host) or
 **self-hosted** (one Docker container, no data leaves your machine).
 
-![Argus dashboard](docs/assets/argus-hero.png)
+![The Argus dashboard — live drift detection across models, with baseline stats and Slack-backed alerts](docs/assets/argus-dashboard.png)
 
 ---
 
@@ -292,3 +292,9 @@ Authenticate with a PyPI API token (`__token__` / `pypi-...`) via `~/.pypirc` or
 `TWINE_PASSWORD` env var in CI.
 
 </details>
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).
